@@ -9,12 +9,13 @@ WORKDIR /app
 RUN apk add --no-cache iputils-ping traceroute
 
 # Copy package.json and package-lock.json (or yarn.lock)
+# Ensure these files include 'oui' as a dependency before building!
 COPY package*.json ./
 
 # Install app dependencies using npm ci for faster, reliable builds
-# --only=production installs only production dependencies
+# --only=production installs only production dependencies (including 'oui')
 RUN npm ci --only=production
-RUN npm i oui
+# REMOVED: RUN npm i oui (should be installed by npm ci now)
 
 # Stage 2: Production Image
 FROM node:18-alpine
