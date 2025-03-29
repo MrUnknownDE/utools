@@ -2,7 +2,7 @@
 # Aktuell nicht nötig, da wir CDN/statische Dateien haben.
 
 # Stage 2: Production Environment using Nginx
-FROM nginx:1.25-alpine # Offizielles, schlankes Nginx Image
+FROM nginx:1.25-alpine
 
 # Arbeitsverzeichnis im Container (optional, aber gute Praxis)
 WORKDIR /usr/share/nginx/html
