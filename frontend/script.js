@@ -66,6 +66,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const tracerouteLoader = document.getElementById('traceroute-loader');
     const tracerouteMessage = document.getElementById('traceroute-message');
 
+    // --- DOM Elements (Footer) ---
+    const commitShaEl = document.getElementById('commit-sha');
+
     // --- Configuration ---
     const API_BASE_URL = '/api'; // Anpassen, falls nötig
 
@@ -257,6 +260,22 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             mapMessageEl.textContent = 'Map could not be loaded due to an error.';
             mapMessageEl.classList.remove('hidden');
+        }
+    }
+
+    /** Ruft die Versionsinformationen (Commit SHA) ab */
+    async function fetchVersionInfo() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/version`);
+            if (!response.ok) throw new Error(`Network response: ${response.statusText} (${response.status})`);
+            const data = await response.json();
+            console.log('Received Version Info:', data);
+            if (commitShaEl) {
+                commitShaEl.textContent = data.commitSha || 'unknown';
+            }
+        } catch (error) {
+            console.error('Failed to fetch version info:', error);
+            if (commitShaEl) commitShaEl.textContent = 'error';
         }
     }
 
@@ -562,6 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Initial Load & Event Listeners ---
     fetchIpInfo(); // Lade Infos zur eigenen IP
+    fetchVersionInfo(); // Lade Versionsinfo für Footer
 
     lookupButton.addEventListener('click', handleLookupClick);
     lookupIpInput.addEventListener('keypress', (event) => {

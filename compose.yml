@@ -1,7 +1,12 @@
 services:
   # Backend Service (Node.js App)
   backend:
-    build: ./backend # Pfad zum Verzeichnis mit dem Backend-Dockerfile
+    build:
+      context: ./backend # Pfad zum Verzeichnis mit dem Backend-Dockerfile
+      args:
+        # Übergibt den Git Commit Hash als Build-Argument.
+        # Erwartet, dass GIT_COMMIT_SHA in der Shell-Umgebung gesetzt ist (z.B. export GIT_COMMIT_SHA=$(git rev-parse --short HEAD))
+        - GIT_COMMIT_SHA=${GIT_COMMIT_SHA:-unknown}
     container_name: utools_backend # Eindeutiger Name für den Container
     restart: unless-stopped
     environment:

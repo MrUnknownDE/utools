@@ -611,6 +611,14 @@ app.get('/api/lookup', async (req, res) => {
     }
 });
 
+// Version Endpunkt
+app.get('/api/version', (req, res) => {
+    const commitSha = process.env.GIT_COMMIT_SHA || 'unknown';
+    logger.info({ commitSha }, 'Version request received');
+    res.json({ commitSha });
+});
+
+
 // --- Server starten ---
 initialize().then(() => {
     app.listen(PORT, () => {
@@ -620,6 +628,7 @@ initialize().then(() => {
         logger.info(`  http://localhost:${PORT}/api/ping?targetIp=<ip>`);
         logger.info(`  http://localhost:${PORT}/api/traceroute?targetIp=<ip>`);
         logger.info(`  http://localhost:${PORT}/api/lookup?targetIp=<ip>`);
+        logger.info(`  http://localhost:${PORT}/api/version`);
     });
 }).catch(error => {
     // Fehler bei der Initialisierung wurde bereits geloggt.

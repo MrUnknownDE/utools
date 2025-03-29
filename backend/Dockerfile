@@ -57,6 +57,10 @@ ENV PING_COUNT=4
 ENV GEOIP_CITY_DB=./data/GeoLite2-City.mmdb
 ENV GEOIP_ASN_DB=./data/GeoLite2-ASN.mmdb
 
+# Define build argument and environment variable for Git commit SHA
+ARG GIT_COMMIT_SHA=unknown
+ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
+
 
 # Run the app when the container launches
 CMD ["node", "server.js"]
