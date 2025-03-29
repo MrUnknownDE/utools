@@ -18,10 +18,6 @@ services:
       # Mappe Port 3000 vom Host auf Port 3000 im Container
       # Zugriff von außen (Browser) erfolgt über localhost:3000
       - "3000:3000"
-    volumes:
-      # Optional: Mount für die MaxMind Daten, um sie zu aktualisieren ohne Image-Neubau
-      # - ./backend/data:/app/data:ro # :ro = read-only im Container
-      # Kein Code-Mount für Produktion, da der Code im Image sein sollte.
     networks:
       - ip_tool_network # Verbinde mit unserem benutzerdefinierten Netzwerk
 
