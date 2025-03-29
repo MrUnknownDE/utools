@@ -37,11 +37,11 @@ router.get('/', (req, res) => {
         return res.status(403).json({ success: false, error: 'Operations on private or local IP addresses are not allowed.' });
     }
 
-    // Get the transaction created by Sentry's tracingHandler middleware
-    const scope = Sentry.getCurrentScope();
-    const transaction = scope?.getTransaction();
-    // Add specific context for this request if needed
-    scope?.setContext("traceroute_details", { targetIp: targetIp });
+    // Add specific context for this request to the current Sentry scope
+    // Errors/Messages captured later in this request handler will have this context.
+    Sentry.configureScope(scope => {
+        scope.setContext("traceroute_details", { targetIp: targetIp, requestIp: requestIp });
+    });
 
 
     try {
@@ -58,18 +58,6 @@ router.get('/', (req, res) => {
         logger.info({ requestIp, targetIp, command: `${command} ${args.join(' ')}` }, 'Spawned traceroute process');
 
         let buffer = '';
-
-        // Flag to ensure transaction is only finished once
-        let transactionFinished = false;
-        const finishTransaction = (status) => {
-            if (!transactionFinished && transaction) {
-                transaction.setStatus(status);
-                transaction.finish();
-                transactionFinished = true;
-                logger.debug({ requestIp, targetIp, status }, 'Sentry transaction finished.');
-            }
-        };
-
 
         const sendEvent = (event, data) => {
             try {
@@ -89,8 +77,7 @@ router.get('/', (req, res) => {
                 Sentry.captureException(e, { level: 'warning', extra: { requestIp, targetIp, event } });
                 if (proc && !proc.killed) proc.kill();
                 if (!res.writableEnded) res.end();
-                // Finish transaction here as well, as the request handling failed
-                finishTransaction('internal_error');
+                // No manual transaction finishing needed here
             }
         };
 
@@ -120,10 +107,10 @@ router.get('/', (req, res) => {
         proc.on('error', (err) => {
             const errorMsg = getErrorMessage(err, 'Failed to start traceroute command due to an unknown error.');
             logger.error({ requestIp, targetIp, error: errorMsg }, `Failed to start traceroute command`);
-            Sentry.captureException(err, { extra: { requestIp, targetIp } });
+            Sentry.captureException(err, { extra: { requestIp, targetIp } }); // Capture original error
             sendEvent('error', { error: `Failed to start traceroute: ${errorMsg}` });
             if (!res.writableEnded) res.end();
-            finishTransaction('internal_error'); // Finish transaction on process error
+            // No manual transaction finishing needed here
         });
 
         proc.on('close', (code) => {
@@ -133,35 +120,35 @@ router.get('/', (req, res) => {
                  else if (buffer.trim()) sendEvent('info', { message: buffer.trim() });
             }
 
-            let status = 'ok';
             if (code !== 0) {
                 const errorMsg = `Traceroute command failed with exit code ${code}`;
                 logger.error({ requestIp, targetIp, exitCode: code }, errorMsg);
                 Sentry.captureMessage('Traceroute command failed', { level: 'error', extra: { requestIp, targetIp, exitCode: code } });
                 sendEvent('error', { error: errorMsg });
-                status = 'unknown_error';
+                // Transaction status will be inferred by Sentry based on errors captured
             } else {
                 logger.info({ requestIp, targetIp }, `Traceroute stream completed successfully.`);
+                // Transaction status will likely be 'ok' if no errors were captured
             }
              sendEvent('end', { exitCode: code });
              if (!res.writableEnded) res.end();
-             finishTransaction(status); // Finish transaction on process close
+             // No manual transaction finishing needed here
         });
 
         req.on('close', () => {
             logger.info({ requestIp, targetIp }, 'Client disconnected from traceroute stream, killing process.');
             if (proc && !proc.killed) proc.kill();
             if (!res.writableEnded) res.end();
-            finishTransaction('cancelled'); // Finish transaction on client disconnect
+            // Sentry transaction might be marked as 'cancelled' automatically or based on timeout
+            // No manual transaction finishing needed here
         });
 
     } catch (error) {
         // This catch handles errors during the initial setup (e.g., spawn fails immediately)
         const errorMsg = getErrorMessage(error, 'Failed to initiate traceroute due to an internal server error.');
         logger.error({ requestIp, targetIp, error: errorMsg, stack: error.stack }, 'Error setting up traceroute stream');
-        Sentry.captureException(error, { extra: { requestIp, targetIp } });
-        // Finish the transaction if an error occurs during setup
-        finishTransaction('internal_error');
+        Sentry.captureException(error, { extra: { requestIp, targetIp } }); // Capture original error
+        // No manual transaction finishing needed here
 
         if (!res.headersSent) {
              res.status(500).json({ success: false, error: `Failed to initiate traceroute: ${errorMsg}` });
