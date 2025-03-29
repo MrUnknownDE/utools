@@ -96,7 +96,7 @@ function isValidMac(mac) {
         return false;
     }
     // Erlaubt Formate wie 00:1A:2B:3C:4D:5E, 00-1A-2B-3C-4D-5E, 001A.2B3C.4D5E
-    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{4}\.){2}([0-9A-Fa-f]{4})$/;
+    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{4}\.){2}([0-9A-Fa-f]{4})$|^([0-9A-Fa-f]{12})$/; // Auch ohne Trennzeichen erlaubt
     return macRegex.test(mac.trim());
 }
 
@@ -698,20 +698,24 @@ app.get('/api/mac-lookup', async (req, res) => {
     }
 
     try {
-        // Verwende macaddress.one() für asynchronen Lookup
-        const result = await macaddress.one(mac);
+        // Bereinige die MAC-Adresse: Entferne alle nicht-hexadezimalen Zeichen
+        const cleanedMac = mac.replace(/[^0-9a-fA-F]/g, '');
+        logger.debug({ requestIp, originalMac: mac, cleanedMac }, 'Cleaned MAC address for lookup');
+
+        // Verwende die bereinigte MAC-Adresse für den Lookup
+        const result = await macaddress.one(cleanedMac);
 
         if (result && result.vendor) { // Prüfe, ob Ergebnis und Vendor existieren
-            logger.info({ requestIp, mac, vendor: result.vendor }, 'MAC lookup successful');
-            res.json({ success: true, mac, vendor: result.vendor });
+            logger.info({ requestIp, mac: cleanedMac, vendor: result.vendor }, 'MAC lookup successful');
+            res.json({ success: true, mac: mac, vendor: result.vendor }); // Gib die originale MAC zurück
         } else {
-            logger.info({ requestIp, mac }, 'MAC lookup successful, but no vendor found');
-            res.json({ success: true, mac, vendor: null, message: 'Vendor not found for this MAC address prefix.' });
+            logger.info({ requestIp, mac: cleanedMac }, 'MAC lookup successful, but no vendor found');
+            res.json({ success: true, mac: mac, vendor: null, message: 'Vendor not found for this MAC address prefix.' }); // Gib die originale MAC zurück
         }
 
     } catch (error) {
         // Fehler können auftreten, wenn die interne DB nicht geladen werden kann
-        // oder die Eingabe ungültig ist
+        // oder die Eingabe ungültig ist (trotz Bereinigung, falls die Bibliothek weitere Prüfungen macht)
         logger.error({ requestIp, mac, error: error.message }, 'MAC lookup failed');
         res.status(500).json({ success: false, error: `MAC lookup failed: ${error.message}` });
     }
