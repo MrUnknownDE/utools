@@ -257,7 +257,7 @@ app.use(cors()); // Erlaubt Anfragen von anderen Origins
 app.use(express.json()); // Parst JSON-Request-Bodies
 
 // Vertraue Proxy-Headern (vorsichtig verwenden!)
-app.set('trust proxy', 1); // Vertraue dem ersten Proxy (z.B. Nginx, Load Balancer)
+app.set('trust proxy', 2); // Vertraue zwei Proxys (externer Nginx + interner Nginx)
 
 // Rate Limiter
 const diagnosticLimiter = rateLimit({
