@@ -1,0 +1,101 @@
+name: Build and Push Docker Images
+
+# Trigger: Wann soll der Workflow laufen?
+on:
+  push:
+    branches: [ main ] # Läuft bei jedem Push zum main-Branch
+  pull_request:
+    branches: [ main ] # Läuft bei Pull Requests gegen den main-Branch (nur Build, kein Push)
+  workflow_dispatch: # Ermöglicht manuelles Starten über die GitHub UI
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest # Verwendet den neuesten Ubuntu-Runner von GitHub
+
+    # Berechtigungen für den GITHUB_TOKEN, um nach GHCR pushen zu können
+    permissions:
+      contents: read      # Zum Auschecken des Codes
+      packages: write     # Zum Pushen nach GitHub Packages (GHCR)
+
+    steps:
+      # 1. Code auschecken
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Docker Metadaten extrahieren (Tags, Labels)
+      #    Wir definieren hier die Namen für beide Images
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/utools-backend
+            ghcr.io/${{ github.repository_owner }}/utools-frontend
+          # Tags generieren:
+          # - Typ 'sha' -> Kurzer Commit-Hash (z.B. sha-a1b2c3d)
+          # - Typ 'ref' für Events 'branch' -> Branch-Name (z.B. 'main' wird zu 'latest')
+          # - Typ 'ref' für Events 'tag' -> Git-Tag-Name (z.B. v1.0.0)
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr # Nur für PR-Events
+
+      # 3. QEMU für Multi-Plattform Builds (optional, aber gute Praxis)
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # 4. Docker Buildx einrichten (verbesserter Builder)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 5. Login bei GitHub Container Registry (GHCR)
+      #    Verwendet den automatisch generierten GITHUB_TOKEN
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }} # Benutzer oder Organisation, dem das Repo gehört
+          password: ${{ secrets.GHCR_PUSH_TOKEN }}
+
+      # 6. Backend Image bauen und pushen
+      - name: Build and push Backend image
+        id: build-backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend # Pfad zum Backend-Dockerfile
+          # Nur pushen, wenn es ein Push zum main-Branch oder ein Git-Tag ist
+          push: ${{ github.event_name == 'push' || github.event_name == 'create' && startsWith(github.ref, 'refs/tags/') }}
+          # Tags und Labels aus dem Metadaten-Schritt verwenden (gefiltert für Backend)
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Filter für das spezifische Backend-Image (Index 0 in der 'images'-Liste oben)
+          # Wichtig: Passe den Index an, falls du die Reihenfolge änderst!
+          image-name-index: 0 # Index des Backend-Images in der 'images'-Liste
+          cache-from: type=gha # GitHub Actions Cache verwenden (Lesen)
+          cache-to: type=gha,mode=max # GitHub Actions Cache verwenden (Schreiben)
+
+      # 7. Frontend Image bauen und pushen
+      - name: Build and push Frontend image
+        id: build-frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend # Pfad zum Frontend-Dockerfile
+          # Nur pushen, wenn es ein Push zum main-Branch oder ein Git-Tag ist
+          push: ${{ github.event_name == 'push' || github.event_name == 'create' && startsWith(github.ref, 'refs/tags/') }}
+          # Tags und Labels aus dem Metadaten-Schritt verwenden (gefiltert für Frontend)
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Filter für das spezifische Frontend-Image (Index 1 in der 'images'-Liste oben)
+          image-name-index: 1 # Index des Frontend-Images in der 'images'-Liste
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 8. (Optional) Output der Image-Namen und Tags
+      - name: Print image names and tags
+        if: always() # Auch ausführen, wenn vorherige Schritte fehlschlagen (zum Debuggen)
+        run: |
+          echo "Backend Image Tags: ${{ steps.meta.outputs.tags }}"
+          echo "Frontend Image Tags: ${{ steps.meta.outputs.tags }}"
+          echo "Backend Image Digest: ${{ steps.build-backend.outputs.digest }}"
+          echo "Frontend Image Digest: ${{ steps.build-frontend.outputs.digest }}"
