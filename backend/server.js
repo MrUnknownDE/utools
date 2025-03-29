@@ -17,15 +17,40 @@ let asnReader;
 // --- Hilfsfunktionen ---
 
 /**
- * Validiert eine IP-Adresse (v4 oder v6).
+ * Validiert eine IP-Adresse (v4 oder v6) robust.
  * @param {string} ip - Die zu validierende IP-Adresse.
  * @returns {boolean} True, wenn gültig, sonst false.
  */
 function isValidIp(ip) {
-    if (!ip) return false;
-    const addr4 = new Address4(ip);
-    const addr6 = new Address6(ip);
-    return addr4.isValid() || addr6.isValid();
+    // Frühe Prüfung auf offensichtlich ungültige Werte
+    if (!ip || typeof ip !== 'string' || ip.trim() === '') {
+        return false;
+    }
+
+    try {
+        // Zuerst versuchen, als IPv4 zu parsen und zu validieren
+        const addr4 = new Address4(ip);
+        if (addr4.isValid()) {
+            return true; // Gültige IPv4
+        }
+
+        // Wenn nicht IPv4, versuchen als IPv6 zu parsen und zu validieren
+        const addr6 = new Address6(ip);
+        if (addr6.isValid()) {
+            return true; // Gültige IPv6
+        }
+
+        // Wenn keine der Konstruktoren einen Fehler geworfen hat,
+        // aber isValid() false zurückgibt (selten, aber möglich)
+        return false;
+
+    } catch (error) {
+        // Wenn bei new Address4() oder new Address6() ein Fehler auftritt
+        // (z.B. "Incorrect number of groups"), ist die Eingabe ungültig.
+        // Wir loggen den Fehler optional für Debugging-Zwecke, geben aber false zurück.
+        // console.warn(`IP validation caught error for input "${ip}": ${error.message}`);
+        return false;
+    }
 }
 
 /**
