@@ -1,11 +1,22 @@
 // server.js
-require('dotenv').config();
+require('dotenv').config(); // Lädt Variablen aus .env in process.env
 const express = require('express');
 const cors = require('cors');
 const geoip = require('@maxmind/geoip2-node');
 const net = require('net'); // Node.js built-in module for IP validation
 const { spawn } = require('child_process');
 const dns = require('dns').promises;
+const pino = require('pino'); // Logging library
+const rateLimit = require('express-rate-limit'); // Rate limiting middleware
+
+// --- Logger Initialisierung ---
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info', // Konfigurierbares Log-Level (z.B. 'debug', 'info', 'warn', 'error')
+  // Pretty print nur im Development, sonst JSON für bessere Maschinenlesbarkeit
+  transport: process.env.NODE_ENV !== 'production'
+    ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:standard', ignore: 'pid,hostname' } }
+    : undefined,
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,19 +33,43 @@ let asnReader;
  * @returns {boolean} True, wenn gültig (als v4 oder v6), sonst false.
  */
 function isValidIp(ip) {
-    // Frühe Prüfung auf offensichtlich ungültige Werte
     if (!ip || typeof ip !== 'string' || ip.trim() === '') {
-        // console.log(`isValidIp (net): Input invalid`); // Optional Debugging
         return false;
     }
     const trimmedIp = ip.trim();
-
-    // net.isIP(trimmedIp) gibt 0 zurück, wenn ungültig, 4 für IPv4, 6 für IPv6.
-    const ipVersion = net.isIP(trimmedIp);
-
-    // console.log(`isValidIp (net): net.isIP check for "${trimmedIp}": Version ${ipVersion}`); // Optional Debugging
-
+    const ipVersion = net.isIP(trimmedIp); // Gibt 0, 4 oder 6 zurück
+    // logger.debug({ ip: trimmedIp, version: ipVersion }, 'isValidIp check'); // Optional: Debug log
     return ipVersion === 4 || ipVersion === 6;
+}
+
+/**
+ * Prüft, ob eine IP-Adresse im privaten, Loopback- oder Link-Local-Bereich liegt.
+ * @param {string} ip - Die zu prüfende IP-Adresse (bereits validiert).
+ * @returns {boolean} True, wenn die IP privat/lokal ist, sonst false.
+ */
+function isPrivateIp(ip) {
+    if (!ip) return false;
+    const ipVersion = net.isIP(ip);
+
+    if (ipVersion === 4) {
+        const parts = ip.split('.').map(Number);
+        return (
+            parts[0] === 10 || // 10.0.0.0/8
+            (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || // 172.16.0.0/12
+            (parts[0] === 192 && parts[1] === 168) || // 192.168.0.0/16
+            parts[0] === 127 || // 127.0.0.0/8 (Loopback)
+            (parts[0] === 169 && parts[1] === 254) // 169.254.0.0/16 (Link-local)
+        );
+    } else if (ipVersion === 6) {
+        const lowerCaseIp = ip.toLowerCase();
+        return (
+            lowerCaseIp === '::1' || // ::1/128 (Loopback)
+            lowerCaseIp.startsWith('fc') || lowerCaseIp.startsWith('fd') || // fc00::/7 (Unique Local)
+            lowerCaseIp.startsWith('fe8') || lowerCaseIp.startsWith('fe9') || // fe80::/10 (Link-local)
+            lowerCaseIp.startsWith('fea') || lowerCaseIp.startsWith('feb')
+        );
+    }
+    return false;
 }
 
 
@@ -45,36 +80,31 @@ function isValidIp(ip) {
  * @returns {string} Die bereinigte IP-Adresse.
  */
 function getCleanIp(ip) {
-    if (!ip) return ip; // Handle null/undefined case
-
-    const trimmedIp = ip.trim(); // Trimmen für Konsistenz
-
+    if (!ip) return ip;
+    const trimmedIp = ip.trim();
     if (trimmedIp.startsWith('::ffff:')) {
         const potentialIp4 = trimmedIp.substring(7);
-        // Prüfen, ob der extrahierte Teil eine gültige IPv4 ist
         if (net.isIP(potentialIp4) === 4) {
             return potentialIp4;
         }
     }
-    // Handle localhost cases for testing
     if (trimmedIp === '::1' || trimmedIp === '127.0.0.1') {
         return trimmedIp;
     }
-    return trimmedIp; // Gib die getrimmte IP zurück
+    return trimmedIp;
 }
 
 /**
- * Führt einen Shell-Befehl sicher aus und gibt stdout zurück.
+ * Führt einen Shell-Befehl sicher aus und gibt stdout zurück. (Nur für Ping verwendet)
  * @param {string} command - Der Befehl (z.B. 'ping').
  * @param {string[]} args - Die Argumente als Array.
  * @returns {Promise<string>} Eine Promise, die mit stdout aufgelöst wird.
  */
 function executeCommand(command, args) {
     return new Promise((resolve, reject) => {
-        // Argumenten-Validierung (einfach)
         args.forEach(arg => {
             if (typeof arg === 'string' && /[;&|`$()<>]/.test(arg)) {
-                console.error(`Potential command injection attempt detected in argument: ${arg}`);
+                logger.error({ command, arg }, "Potential command injection attempt detected in argument");
                 return reject(new Error(`Invalid character detected in command argument.`));
             }
         });
@@ -86,12 +116,12 @@ function executeCommand(command, args) {
         proc.stdout.on('data', (data) => { stdout += data.toString(); });
         proc.stderr.on('data', (data) => { stderr += data.toString(); });
         proc.on('error', (err) => {
-            console.error(`Failed to start command ${command}: ${err.message}`);
+            logger.error({ command, args, error: err.message }, `Failed to start command`);
             reject(new Error(`Failed to start command ${command}: ${err.message}`));
         });
         proc.on('close', (code) => {
             if (code !== 0) {
-                console.error(`Command ${command} ${args.join(' ')} failed with code ${code}: ${stderr || stdout}`);
+                logger.error({ command, args, exitCode: code, stderr: stderr.trim(), stdout: stdout.trim() }, `Command failed`);
                 reject(new Error(`Command ${command} failed with code ${code}: ${stderr || 'No stderr output'}`));
             } else {
                 resolve(stdout);
@@ -100,84 +130,167 @@ function executeCommand(command, args) {
     });
 }
 
+/**
+ * Parst die Ausgabe des Linux/macOS ping Befehls.
+ * @param {string} pingOutput - Die rohe stdout Ausgabe von ping.
+ * @returns {object} Ein Objekt mit geparsten Daten oder Fehlern.
+ */
+function parsePingOutput(pingOutput) {
+    const result = {
+        rawOutput: pingOutput,
+        stats: null,
+        error: null,
+    };
+
+    try {
+        let packetsTransmitted = 0;
+        let packetsReceived = 0;
+        let packetLossPercent = 100;
+        let rtt = { min: null, avg: null, max: null, mdev: null };
+
+        const lines = pingOutput.trim().split('\n');
+        const statsLine = lines.find(line => line.includes('packets transmitted'));
+        if (statsLine) {
+            const transmittedMatch = statsLine.match(/(\d+)\s+packets transmitted/);
+            const receivedMatch = statsLine.match(/(\d+)\s+(?:received|packets received)/); // Anpassung für Varianten
+            const lossMatch = statsLine.match(/([\d.]+)%\s+packet loss/);
+            if (transmittedMatch) packetsTransmitted = parseInt(transmittedMatch[1], 10);
+            if (receivedMatch) packetsReceived = parseInt(receivedMatch[1], 10);
+            if (lossMatch) packetLossPercent = parseFloat(lossMatch[1]);
+        }
+
+        const rttLine = lines.find(line => line.startsWith('rtt min/avg/max/mdev') || line.startsWith('round-trip min/avg/max/stddev'));
+         if (rttLine) {
+            const rttMatch = rttLine.match(/([\d.]+)\/([\d.]+)\/([\d.]+)\/([\d.]+)/);
+            if (rttMatch) {
+                rtt = {
+                    min: parseFloat(rttMatch[1]),
+                    avg: parseFloat(rttMatch[2]),
+                    max: parseFloat(rttMatch[3]),
+                    mdev: parseFloat(rttMatch[4]),
+                };
+            }
+        }
+
+        result.stats = {
+            packets: { transmitted: packetsTransmitted, received: packetsReceived, lossPercent: packetLossPercent },
+            rtt: rtt.avg !== null ? rtt : null,
+        };
+        if (packetsTransmitted > 0 && rtt.avg === null && packetsReceived === 0) {
+             result.error = "Request timed out or host unreachable."; // Spezifischer Fehler bei Totalausfall
+        }
+
+    } catch (parseError) {
+        logger.error({ error: parseError.message, output: pingOutput }, "Failed to parse ping output");
+        result.error = "Failed to parse ping output.";
+    }
+    return result;
+}
 
 /**
- * Prüft, ob eine IP-Adresse im privaten, Loopback- oder Link-Local-Bereich liegt.
- * @param {string} ip - Die zu prüfende IP-Adresse (bereits validiert).
- * @returns {boolean} True, wenn die IP privat/lokal ist, sonst false.
+ * Parst eine einzelne Zeile der Linux/macOS traceroute Ausgabe.
+ * @param {string} line - Eine Zeile aus stdout.
+ * @returns {object | null} Ein Objekt mit Hop-Daten oder null bei uninteressanten Zeilen.
  */
-function isPrivateIp(ip) {
-    if (!ip) return false; // Sollte durch isValidIp vorher abgefangen werden
+function parseTracerouteLine(line) {
+    line = line.trim();
+    if (!line || line.startsWith('traceroute to')) return null; // Ignoriere Header
 
-    const ipVersion = net.isIP(ip); // Gibt 4 oder 6 zurück
+    // Regex angepasst für mehr Robustheit (optionaler Hostname, IP immer da, RTTs oder *)
+    const hopMatch = line.match(/^(\s*\d+)\s+(?:([a-zA-Z0-9\.\-]+)\s+\(([\d\.:a-fA-F]+)\)|([\d\.:a-fA-F]+))\s+(.*)$/);
+    const timeoutMatch = line.match(/^(\s*\d+)\s+(\*\s+\*\s+\*)/);
 
-    if (ipVersion === 4) {
-        const parts = ip.split('.').map(Number);
-        return (
-            // 10.0.0.0/8
-            parts[0] === 10 ||
-            // 172.16.0.0/12
-            (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-            // 192.168.0.0/16
-            (parts[0] === 192 && parts[1] === 168) ||
-            // 127.0.0.0/8 (Loopback)
-            parts[0] === 127 ||
-            // 169.254.0.0/16 (Link-local)
-            (parts[0] === 169 && parts[1] === 254)
-        );
-    } else if (ipVersion === 6) {
-        const lowerCaseIp = ip.toLowerCase();
-        return (
-            // ::1/128 (Loopback)
-            lowerCaseIp === '::1' ||
-            // fc00::/7 (Unique Local Addresses)
-            lowerCaseIp.startsWith('fc') || lowerCaseIp.startsWith('fd') ||
-            // fe80::/10 (Link-local)
-            lowerCaseIp.startsWith('fe8') || lowerCaseIp.startsWith('fe9') ||
-            lowerCaseIp.startsWith('fea') || lowerCaseIp.startsWith('feb')
-        );
+    if (timeoutMatch) {
+         return {
+            hop: parseInt(timeoutMatch[1].trim(), 10),
+            hostname: null,
+            ip: null,
+            rtt: ['*', '*', '*'],
+            rawLine: line,
+        };
+    } else if (hopMatch) {
+        const hop = parseInt(hopMatch[1].trim(), 10);
+        const hostname = hopMatch[2]; // Kann undefined sein
+        const ipInParen = hopMatch[3]; // Kann undefined sein
+        const ipDirect = hopMatch[4]; // Kann undefined sein
+        const restOfLine = hopMatch[5].trim();
+
+        const ip = ipInParen || ipDirect;
+
+        // Extrahiere RTTs (können * sein oder Zahl mit " ms")
+        const rttParts = restOfLine.split(/\s+/);
+        const rtts = rttParts.map(p => p === '*' ? '*' : p.replace(/\s*ms$/, '')).filter(p => p === '*' || !isNaN(parseFloat(p))).slice(0, 3);
+        // Fülle fehlende RTTs mit '*' auf, falls weniger als 3 gefunden wurden
+        while (rtts.length < 3) rtts.push('*');
+
+         return {
+            hop: hop,
+            hostname: hostname || null, // Setze null, wenn kein Hostname gefunden
+            ip: ip,
+            rtt: rtts,
+            rawLine: line,
+        };
     }
-
-    // Wenn net.isIP 0 zurückgibt (sollte nicht passieren nach isValidIp)
-    return false;
+    // logger.debug({ line }, "Unparsed traceroute line"); // Optional: Log unparsed lines
+    return null; // Nicht als Hop-Zeile erkannt
 }
+
 
 // --- Initialisierung (MaxMind DBs laden) ---
 async function initialize() {
     try {
-        console.log('Loading MaxMind databases...');
+        logger.info('Loading MaxMind databases...');
         const cityDbPath = process.env.GEOIP_CITY_DB || './data/GeoLite2-City.mmdb';
         const asnDbPath = process.env.GEOIP_ASN_DB || './data/GeoLite2-ASN.mmdb';
-        console.log(`City DB Path: ${cityDbPath}`);
-        console.log(`ASN DB Path: ${asnDbPath}`);
+        logger.info({ cityDbPath, asnDbPath }, 'Database paths');
         cityReader = await geoip.Reader.open(cityDbPath);
         asnReader = await geoip.Reader.open(asnDbPath);
-        console.log('MaxMind databases loaded successfully.');
+        logger.info('MaxMind databases loaded successfully.');
     } catch (error) {
-        console.error('FATAL: Could not load MaxMind databases.');
-        console.error('Ensure GEOIP_CITY_DB and GEOIP_ASN_DB point to valid .mmdb files in the ./data directory or via .env');
-        console.error(error);
+        logger.fatal({ error: error.message, stack: error.stack }, 'Could not load MaxMind databases. Exiting.');
         process.exit(1);
     }
 }
 
 // --- Middleware ---
-app.use(cors());
-app.use(express.json());
-// app.set('trust proxy', true); // Nur aktivieren, wenn nötig und korrekt konfiguriert
+app.use(cors()); // Erlaubt Anfragen von anderen Origins
+app.use(express.json()); // Parst JSON-Request-Bodies
+
+// Vertraue Proxy-Headern (vorsichtig verwenden!)
+// app.set('trust proxy', 1); // Vertraue dem ersten Proxy (z.B. Nginx, Load Balancer)
+
+// Rate Limiter
+const diagnosticLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 Minuten
+    max: process.env.NODE_ENV === 'production' ? 10 : 100, // Mehr Anfragen im Dev erlauben
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many diagnostic requests (ping/traceroute) from this IP, please try again after 5 minutes' },
+    keyGenerator: (req, res) => req.ip || req.socket.remoteAddress, // IP des Clients als Schlüssel
+    handler: (req, res, next, options) => {
+        logger.warn({ ip: req.ip || req.socket.remoteAddress, route: req.originalUrl }, 'Rate limit exceeded');
+        res.status(options.statusCode).send(options.message);
+    }
+});
+
+// Wende Limiter nur auf Ping und Traceroute an
+app.use('/api/ping', diagnosticLimiter);
+app.use('/api/traceroute', diagnosticLimiter);
+
 
 // --- Routen ---
 
 // Haupt-Endpunkt: Liefert alle Infos zur IP des Clients
 app.get('/api/ipinfo', async (req, res) => {
-    console.log(`ipinfo request: req.ip = ${req.ip}, req.socket.remoteAddress = ${req.socket.remoteAddress}`);
-    const clientIpRaw = req.ip || req.socket.remoteAddress;
-    const clientIp = getCleanIp(clientIpRaw); // Verwendet jetzt die neue getCleanIp
+    const requestIp = req.ip || req.socket.remoteAddress; // req.ip berücksichtigt 'trust proxy'
+    logger.info({ ip: requestIp, method: req.method, url: req.originalUrl }, 'ipinfo request received');
 
-    console.log(`ipinfo: Raw IP = ${clientIpRaw}, Cleaned IP = ${clientIp}`);
+    const clientIp = getCleanIp(requestIp);
+    logger.debug({ rawIp: requestIp, cleanedIp: clientIp }, 'IP cleaning result');
 
-    if (!clientIp || !isValidIp(clientIp)) { // Verwendet jetzt die neue isValidIp
+    if (!clientIp || !isValidIp(clientIp)) {
          if (clientIp === '127.0.0.1' || clientIp === '::1') {
+             logger.info({ ip: clientIp }, 'Responding with localhost info');
              return res.json({
                  ip: clientIp,
                  geo: { note: 'Localhost IP, no Geo data available.' },
@@ -185,36 +298,53 @@ app.get('/api/ipinfo', async (req, res) => {
                  rdns: ['localhost'],
              });
          }
-        console.error(`ipinfo: Could not determine a valid client IP. Raw: ${clientIpRaw}, Cleaned: ${clientIp}`);
-        return res.status(400).json({ error: 'Could not determine a valid client IP address.', rawIp: clientIpRaw, cleanedIp: clientIp });
+        logger.error({ rawIp: requestIp, cleanedIp: clientIp }, 'Could not determine a valid client IP');
+        return res.status(400).json({ error: 'Could not determine a valid client IP address.', rawIp: requestIp, cleanedIp: clientIp });
     }
 
     try {
         let geo = null;
         try {
             const geoData = cityReader.city(clientIp);
-            geo = { /* ... Geo-Daten wie zuvor ... */ };
+            geo = {
+                city: geoData.city?.names?.en,
+                region: geoData.subdivisions?.[0]?.isoCode,
+                country: geoData.country?.isoCode,
+                countryName: geoData.country?.names?.en,
+                postalCode: geoData.postal?.code,
+                latitude: geoData.location?.latitude,
+                longitude: geoData.location?.longitude,
+                timezone: geoData.location?.timeZone,
+            };
+            logger.debug({ ip: clientIp, geo }, 'GeoIP lookup successful');
         } catch (e) {
-            console.warn(`ipinfo: MaxMind City lookup failed for ${clientIp}: ${e.message}`);
-            geo = { error: 'GeoIP lookup failed.' };
+            logger.warn({ ip: clientIp, error: e.message }, `MaxMind City lookup failed`);
+            geo = { error: 'GeoIP lookup failed (IP not found in database or private range).' };
          }
 
         let asn = null;
         try {
             const asnData = asnReader.asn(clientIp);
-            asn = { /* ... ASN-Daten wie zuvor ... */ };
+            asn = {
+                number: asnData.autonomousSystemNumber,
+                organization: asnData.autonomousSystemOrganization,
+            };
+             logger.debug({ ip: clientIp, asn }, 'ASN lookup successful');
         } catch (e) {
-            console.warn(`ipinfo: MaxMind ASN lookup failed for ${clientIp}: ${e.message}`);
-            asn = { error: 'ASN lookup failed.' };
+            logger.warn({ ip: clientIp, error: e.message }, `MaxMind ASN lookup failed`);
+            asn = { error: 'ASN lookup failed (IP not found in database or private range).' };
         }
 
         let rdns = null;
         try {
             const hostnames = await dns.reverse(clientIp);
             rdns = hostnames;
+            logger.debug({ ip: clientIp, rdns }, 'rDNS lookup successful');
         } catch (e) {
             if (e.code !== 'ENOTFOUND' && e.code !== 'ENODATA') {
-                console.warn(`ipinfo: rDNS lookup error for ${clientIp}:`, e.message);
+                logger.warn({ ip: clientIp, error: e.message, code: e.code }, `rDNS lookup error`);
+            } else {
+                 logger.debug({ ip: clientIp, code: e.code }, 'rDNS lookup failed (No record)');
             }
             rdns = { error: `rDNS lookup failed (${e.code || 'Unknown error'})` };
          }
@@ -222,8 +352,8 @@ app.get('/api/ipinfo', async (req, res) => {
         res.json({ ip: clientIp, geo, asn, rdns });
 
     } catch (error) {
-        console.error(`ipinfo: Error processing ipinfo for ${clientIp}:`, error);
-        res.status(500).json({ error: 'Internal server error.' });
+        logger.error({ ip: clientIp, error: error.message, stack: error.stack }, 'Error processing ipinfo');
+        res.status(500).json({ error: 'Internal server error while processing IP information.' });
     }
 });
 
@@ -231,92 +361,190 @@ app.get('/api/ipinfo', async (req, res) => {
 app.get('/api/ping', async (req, res) => {
     const targetIpRaw = req.query.targetIp;
     const targetIp = typeof targetIpRaw === 'string' ? targetIpRaw.trim() : targetIpRaw;
+    const requestIp = req.ip || req.socket.remoteAddress;
 
-    console.log(`--- PING Request ---`);
-    console.log(`Value of targetIp: "${targetIp}"`);
+    logger.info({ requestIp, targetIp }, 'Ping request received');
 
-    const isValidResult = isValidIp(targetIp);
-    console.log(`isValidIp (net) result for "${targetIp}": ${isValidResult}`);
-
-    if (!isValidResult) {
-        console.log(`isValidIp (net) returned false for "${targetIp}", sending 400.`);
+    if (!isValidIp(targetIp)) {
+        logger.warn({ requestIp, targetIp }, 'Invalid target IP for ping');
         return res.status(400).json({ error: 'Invalid target IP address provided.' });
     }
 
-    // --- NEUE PRÜFUNG AUF PRIVATE IP ---
     if (isPrivateIp(targetIp)) {
-        console.log(`Target IP "${targetIp}" is private/local. Aborting ping.`);
+        logger.warn({ requestIp, targetIp }, 'Attempt to ping private IP blocked');
         return res.status(403).json({ error: 'Operations on private or local IP addresses are not allowed.' });
     }
-    // --- ENDE NEUE PRÜFUNG ---
 
     try {
-        console.log(`Proceeding to execute ping for "${targetIp}"...`);
-        const args = ['-c', '4', targetIp];
+        const pingCount = process.env.PING_COUNT || '4';
+        const countArg = parseInt(pingCount, 10) || 4;
+        const args = ['-c', `${countArg}`, targetIp]; // Linux/macOS
         const command = 'ping';
 
-        console.log(`Executing: ${command} ${args.join(' ')}`);
+        logger.info({ requestIp, targetIp, command: `${command} ${args.join(' ')}` }, 'Executing ping');
         const output = await executeCommand(command, args);
+        const parsedResult = parsePingOutput(output);
 
-        console.log(`Ping for ${targetIp} successful.`);
-        // TODO: Ping-Ausgabe parsen
-        res.json({ success: true, rawOutput: output });
+        logger.info({ requestIp, targetIp, stats: parsedResult.stats }, 'Ping successful');
+        res.json({ success: true, ...parsedResult });
 
     } catch (error) {
-        res.status(500).json({ success: false, error: `Ping command failed: ${error.message}` });
+        // executeCommand loggt bereits Details
+        logger.error({ requestIp, targetIp, error: error.message }, 'Ping command failed');
+        // Sende strukturierte Fehlermeldung, wenn möglich
+        const parsedError = parsePingOutput(error.message); // Versuche, Fehler aus Ping-Output zu parsen
+        res.status(500).json({
+             success: false,
+             error: `Ping command failed: ${parsedError.error || error.message}`,
+             rawOutput: parsedError.rawOutput || error.message
+        });
     }
 });
 
-// Traceroute Endpunkt
-app.get('/api/traceroute', async (req, res) => {
+// Traceroute Endpunkt (Server-Sent Events)
+app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir streamen
     const targetIpRaw = req.query.targetIp;
     const targetIp = typeof targetIpRaw === 'string' ? targetIpRaw.trim() : targetIpRaw;
+    const requestIp = req.ip || req.socket.remoteAddress;
 
-    console.log(`--- TRACEROUTE Request ---`);
-    console.log(`Value of targetIp: "${targetIp}"`);
+    logger.info({ requestIp, targetIp }, 'Traceroute stream request received');
 
-    const isValidResult = isValidIp(targetIp);
-    console.log(`isValidIp (net) result for "${targetIp}": ${isValidResult}`);
-
-    if (!isValidResult) {
-        console.log(`isValidIp (net) returned false for "${targetIp}", sending 400.`);
+    if (!isValidIp(targetIp)) {
+        logger.warn({ requestIp, targetIp }, 'Invalid target IP for traceroute');
         return res.status(400).json({ error: 'Invalid target IP address provided.' });
     }
 
-    // --- NEUE PRÜFUNG AUF PRIVATE IP ---
     if (isPrivateIp(targetIp)) {
-        console.log(`Target IP "${targetIp}" is private/local. Aborting traceroute.`);
+        logger.warn({ requestIp, targetIp }, 'Attempt to traceroute private IP blocked');
         return res.status(403).json({ error: 'Operations on private or local IP addresses are not allowed.' });
     }
-    // --- ENDE NEUE PRÜFUNG ---
 
     try {
-        console.log(`Proceeding to execute traceroute for "${targetIp}"...`);
-        const args = ['-n', targetIp]; // Linux/macOS
+        logger.info({ requestIp, targetIp }, `Starting traceroute stream...`);
+
+        // Set SSE Headers
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no'); // Wichtig für Nginx-Proxies
+        res.flushHeaders(); // Send headers immediately
+
+        const args = ['-n', targetIp]; // Linux/macOS, -n für keine Namensauflösung (schneller)
         const command = 'traceroute';
+        const proc = spawn(command, args);
+        logger.info({ requestIp, targetIp, command: `${command} ${args.join(' ')}` }, 'Spawned traceroute process');
 
-        console.log(`Executing: ${command} ${args.join(' ')}`);
-        const output = await executeCommand(command, args);
+        let buffer = ''; // Buffer für unvollständige Zeilen
 
-        console.log(`Traceroute for ${targetIp} successful.`);
-        // TODO: Traceroute-Ausgabe parsen
-        res.json({ success: true, rawOutput: output });
+        const sendEvent = (event, data) => {
+            try {
+                res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+            } catch (e) {
+                logger.error({ requestIp, targetIp, event, error: e.message }, "Error writing to SSE stream (client likely disconnected)");
+                proc.kill(); // Beende Prozess, wenn Schreiben fehlschlägt
+                res.end();
+            }
+        };
+
+        proc.stdout.on('data', (data) => {
+            buffer += data.toString();
+            let lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Letzte (evtl. unvollständige) Zeile zurück in den Buffer
+
+            lines.forEach(line => {
+                const parsed = parseTracerouteLine(line);
+                if (parsed) {
+                    logger.debug({ requestIp, targetIp, hop: parsed.hop, ip: parsed.ip }, 'Sending hop data');
+                    sendEvent('hop', parsed);
+                } else if (line.trim()) {
+                     logger.debug({ requestIp, targetIp, message: line.trim() }, 'Sending info data');
+                     sendEvent('info', { message: line.trim() });
+                }
+            });
+        });
+
+        proc.stderr.on('data', (data) => {
+            const errorMsg = data.toString().trim();
+            logger.warn({ requestIp, targetIp, stderr: errorMsg }, 'Traceroute stderr output');
+            sendEvent('error', { error: errorMsg });
+        });
+
+        proc.on('error', (err) => {
+            logger.error({ requestIp, targetIp, error: err.message }, `Failed to start traceroute command`);
+            sendEvent('error', { error: `Failed to start traceroute: ${err.message}` });
+            if (!res.writableEnded) res.end();
+        });
+
+        proc.on('close', (code) => {
+            if (buffer) { // Verarbeite letzte Zeile im Buffer
+                 const parsed = parseTracerouteLine(buffer);
+                 if (parsed) {
+                     sendEvent('hop', parsed);
+                 } else if (buffer.trim()) {
+                     sendEvent('info', { message: buffer.trim() });
+                 }
+            }
+
+            if (code !== 0) {
+                logger.error({ requestIp, targetIp, exitCode: code }, `Traceroute command finished with error code ${code}`);
+                sendEvent('error', { error: `Traceroute command failed with exit code ${code}` });
+            } else {
+                logger.info({ requestIp, targetIp }, `Traceroute stream completed successfully.`);
+            }
+             sendEvent('end', { exitCode: code });
+             if (!res.writableEnded) res.end();
+        });
+
+        // Handle client disconnect
+        req.on('close', () => {
+            logger.info({ requestIp, targetIp }, 'Client disconnected from traceroute stream, killing process.');
+            if (!proc.killed) {
+                proc.kill();
+            }
+            if (!res.writableEnded) res.end();
+        });
 
     } catch (error) {
-        res.status(500).json({ success: false, error: `Traceroute command failed: ${error.message}` });
+        // Dieser Catch ist eher für synchrone Fehler vor dem Spawn
+        logger.error({ requestIp, targetIp, error: error.message, stack: error.stack }, 'Error setting up traceroute stream');
+        if (!res.headersSent) {
+             res.status(500).json({ success: false, error: `Failed to initiate traceroute: ${error.message}` });
+        } else {
+             // Wenn Header gesendet wurden, können wir nur noch versuchen, einen Fehler zu schreiben und zu beenden
+             try {
+                 if (!res.writableEnded) {
+                    res.write(`event: error\ndata: ${JSON.stringify({ error: `Internal server error: ${error.message}` })}\n\n`);
+                    res.end();
+                 }
+             } catch (e) { logger.error({ requestIp, targetIp, error: e.message }, "Error writing final error to SSE stream"); }
+        }
     }
-});
+}); // Ende von app.get('/api/traceroute'...)
 
 
 // --- Server starten ---
 initialize().then(() => {
     app.listen(PORT, () => {
-        console.log(`Server listening on port ${PORT}`);
-        console.log(`API endpoints available at:`);
-        console.log(`  http://localhost:${PORT}/api/ipinfo`);
-        console.log(`  http://localhost:${PORT}/api/ping?targetIp=<ip>`);
-        console.log(`  http://localhost:${PORT}/api/traceroute?targetIp=<ip>`);
+        logger.info({ port: PORT, node_env: process.env.NODE_ENV || 'development' }, `Server listening`);
+        logger.info(`API endpoints available at:`);
+        logger.info(`  http://localhost:${PORT}/api/ipinfo`);
+        logger.info(`  http://localhost:${PORT}/api/ping?targetIp=<ip>`);
+        logger.info(`  http://localhost:${PORT}/api/traceroute?targetIp=<ip>`);
     });
 }).catch(error => {
-    console.error("Server could not start due to initialization errors.");
+    // Fehler bei der Initialisierung wurde bereits geloggt.
+    logger.fatal("Server could not start due to initialization errors.");
+    process.exit(1); // Beenden bei schwerwiegendem Startfehler
+});
+
+// Graceful Shutdown Handling (optional aber gut für Produktion)
+const signals = { 'SIGINT': 2, 'SIGTERM': 15 };
+Object.keys(signals).forEach((signal) => {
+  process.on(signal, () => {
+    logger.info(`Received ${signal}, shutting down gracefully...`);
+    // Hier könnten noch offene Verbindungen geschlossen werden etc.
+    // z.B. server.close(() => { logger.info('HTTP server closed.'); process.exit(128 + signals[signal]); });
+    // Für dieses Beispiel beenden wir direkt:
+    process.exit(128 + signals[signal]);
+  });
 });
