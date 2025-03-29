@@ -9,7 +9,7 @@ const dns = require('dns').promises;
 const pino = require('pino'); // Logging library
 const rateLimit = require('express-rate-limit'); // Rate limiting middleware
 const whois = require('whois-json'); // Hinzugefügt für WHOIS
-const macaddress = require('macaddress'); // Ersetzt oui
+const oui = require('oui'); // Ersetzt macaddress für OUI Lookup
 
 // --- Logger Initialisierung ---
 const logger = pino({
@@ -95,8 +95,9 @@ function isValidMac(mac) {
     if (!mac || typeof mac !== 'string') {
         return false;
     }
-    // Erlaubt Formate wie 00:1A:2B:3C:4D:5E, 00-1A-2B-3C-4D-5E, 001A.2B3C.4D5E
-    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{4}\.){2}([0-9A-Fa-f]{4})$|^([0-9A-Fa-f]{12})$/; // Auch ohne Trennzeichen erlaubt
+    // Erlaubt Formate wie 00:1A:2B:3C:4D:5E, 00-1A-2B-3C-4D-5E, 001A.2B3C.4D5E, 001a2b3c4d5e
+    // Die oui Bibliothek ist tolerant gegenüber verschiedenen Formaten.
+    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{4}\.){2}([0-9A-Fa-f]{4})$|^([0-9A-Fa-f]{12})$/;
     return macRegex.test(mac.trim());
 }
 
@@ -258,7 +259,7 @@ function parseTracerouteLine(line) {
 }
 
 
-// --- Initialisierung (MaxMind DBs laden) ---
+// --- Initialisierung (MaxMind DBs laden & OUI DB laden) ---
 async function initialize() {
     try {
         logger.info('Loading MaxMind databases...');
@@ -269,11 +270,13 @@ async function initialize() {
         asnReader = await geoip.Reader.open(asnDbPath);
         logger.info('MaxMind databases loaded successfully.');
 
-        // Kein explizites Laden für 'macaddress' nötig.
-        logger.info('MAC address lookup data (macaddress) will be loaded on first use.');
+        // OUI Datenbank laden (kann beim ersten Aufruf etwas dauern)
+        logger.info('Loading OUI database...');
+        await oui.update(); // Sicherstellen, dass die DB aktuell ist (optional, aber empfohlen)
+        logger.info('OUI database loaded/updated.');
 
     } catch (error) {
-        logger.fatal({ error: error.message, stack: error.stack }, 'Could not initialize MaxMind databases. Exiting.');
+        logger.fatal({ error: error.message, stack: error.stack }, 'Could not initialize databases. Exiting.');
         process.exit(1);
     }
 }
@@ -684,7 +687,7 @@ app.get('/api/whois-lookup', async (req, res) => {
     }
 });
 
-// MAC Address Lookup Endpunkt (mit 'macaddress' Bibliothek)
+// MAC Address Lookup Endpunkt (mit 'oui' Bibliothek)
 app.get('/api/mac-lookup', async (req, res) => {
     const macRaw = req.query.mac;
     const mac = typeof macRaw === 'string' ? macRaw.trim() : macRaw;
@@ -698,24 +701,20 @@ app.get('/api/mac-lookup', async (req, res) => {
     }
 
     try {
-        // Bereinige die MAC-Adresse: Entferne alle nicht-hexadezimalen Zeichen
-        const cleanedMac = mac.replace(/[^0-9a-fA-F]/g, '');
-        logger.debug({ requestIp, originalMac: mac, cleanedMac }, 'Cleaned MAC address for lookup');
+        // Verwende die oui Bibliothek für den Lookup. Sie sollte verschiedene Formate verarbeiten können.
+        // oui() gibt den Vendor-String oder null zurück. Es kann beim ersten Mal die DB laden.
+        const vendor = await oui(mac); // Verwende await, falls oui.update() im Hintergrund läuft
 
-        // Verwende die bereinigte MAC-Adresse für den Lookup
-        const result = await macaddress.one(cleanedMac);
-
-        if (result && result.vendor) { // Prüfe, ob Ergebnis und Vendor existieren
-            logger.info({ requestIp, mac: cleanedMac, vendor: result.vendor }, 'MAC lookup successful');
-            res.json({ success: true, mac: mac, vendor: result.vendor }); // Gib die originale MAC zurück
+        if (vendor) {
+            logger.info({ requestIp, mac, vendor }, 'MAC lookup successful');
+            res.json({ success: true, mac: mac, vendor: vendor });
         } else {
-            logger.info({ requestIp, mac: cleanedMac }, 'MAC lookup successful, but no vendor found');
-            res.json({ success: true, mac: mac, vendor: null, message: 'Vendor not found for this MAC address prefix.' }); // Gib die originale MAC zurück
+            logger.info({ requestIp, mac }, 'MAC lookup successful, but no vendor found');
+            res.json({ success: true, mac: mac, vendor: null, message: 'Vendor not found for this MAC address prefix.' });
         }
 
     } catch (error) {
-        // Fehler können auftreten, wenn die interne DB nicht geladen werden kann
-        // oder die Eingabe ungültig ist (trotz Bereinigung, falls die Bibliothek weitere Prüfungen macht)
+        // Fehler können auftreten, wenn die interne DB nicht geladen werden kann oder andere Probleme auftreten
         logger.error({ requestIp, mac, error: error.message }, 'MAC lookup failed');
         res.status(500).json({ success: false, error: `MAC lookup failed: ${error.message}` });
     }
