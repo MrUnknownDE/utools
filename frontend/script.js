@@ -23,6 +23,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const geoErrorEl = document.getElementById('geo-error');
     const asnErrorEl = document.getElementById('asn-error');
     const rdnsErrorEl = document.getElementById('rdns-error');
+    // Get references to the info containers themselves
+    const geoInfo = document.getElementById('geo-info');
+    const asnInfo = document.getElementById('asn-info');
+    const rdnsInfo = document.getElementById('rdns-info');
+
 
     // --- DOM Elements (Lookup) ---
     const lookupIpInput = document.getElementById('lookup-ip-input');
@@ -97,8 +102,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (errorElement) errorElement.textContent = ''; // Clear previous error
 
         // Zeige das Elternelement des valueElements, falls es vorher versteckt war (für initiale Ladeanzeige)
-        if (valueElement?.parentElement?.classList.contains('hidden')) {
-            valueElement.parentElement.classList.remove('hidden');
+        // This should be the data container div (e.g., the div inside #geo-info)
+        const dataContainer = valueElement?.closest('div:not(.loader)'); // Find closest parent div that isn't a loader
+        if (dataContainer?.classList.contains('hidden')) {
+            dataContainer.classList.remove('hidden');
         }
 
         if (value && typeof value === 'object' && value.error) {
@@ -125,8 +132,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (errorElement) errorElement.textContent = '';
 
          // Zeige das Elternelement des listElements, falls es vorher versteckt war
-         if (listElement?.parentElement?.classList.contains('hidden')) {
-            listElement.parentElement.classList.remove('hidden');
+         const dataContainer = listElement?.closest('div:not(.loader)');
+         if (dataContainer?.classList.contains('hidden')) {
+            dataContainer.classList.remove('hidden');
         }
 
         if (rdnsData && Array.isArray(rdnsData)) {
@@ -206,12 +214,10 @@ document.addEventListener('DOMContentLoaded', () => {
     async function fetchIpInfo() {
         hideGlobalError();
         [ipLoader, geoLoader, asnLoader, rdnsLoader, mapLoader].forEach(l => l?.classList.remove('hidden'));
-        // Hide data containers initially
+        // Hide data elements initially (containers are hidden by default in HTML)
         ipAddressEl.classList.add('hidden');
-        geoInfo.querySelector('div').classList.add('hidden');
-        asnInfo.querySelector('div').classList.add('hidden');
-        rdnsInfo.querySelector('div').classList.add('hidden');
         mapEl.classList.add('hidden');
+        // Ensure map message is hidden initially
         mapMessageEl.classList.add('hidden');
 
 
@@ -244,6 +250,11 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Failed to fetch user IP info:', error);
             showGlobalError(`Could not load initial IP information. ${error.message}`);
             [ipLoader, geoLoader, asnLoader, rdnsLoader, mapLoader].forEach(l => l?.classList.add('hidden'));
+            // Ensure data containers are visible to show potential errors inside them
+            [geoInfo, asnInfo, rdnsInfo].forEach(container => {
+                const dataDiv = container?.querySelector('div:not(.loader)'); // Select the data div, not the loader
+                if (dataDiv) dataDiv.classList.remove('hidden');
+            });
             mapMessageEl.textContent = 'Map could not be loaded due to an error.';
             mapMessageEl.classList.remove('hidden');
         }
