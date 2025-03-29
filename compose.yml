@@ -14,10 +14,6 @@ services:
       # könnten hier aber überschrieben werden, falls nötig.
       # GEOIP_CITY_DB: ./data/GeoLite2-City.mmdb
       # GEOIP_ASN_DB: ./data/GeoLite2-ASN.mmdb
-    ports:
-      # Mappe Port 3000 vom Host auf Port 3000 im Container
-      # Zugriff von außen (Browser) erfolgt über localhost:3000
-      - "3000:3000"
     dns:
       - 1.1.1.1    # Cloudflare DNS
       - 1.0.0.1    # Cloudflare DNS
