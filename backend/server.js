@@ -65,7 +65,7 @@ if (Sentry.Handlers && Sentry.Handlers.tracingHandler) {
 // --- Core Middleware ---
 app.use(cors()); // Enable CORS
 app.use(express.json()); // Parse JSON bodies
-app.set('trust proxy', parseInt(process.env.TRUST_PROXY_COUNT || '1', 10)); // Adjust based on your proxy setup, ensure integer
+app.set('trust proxy', parseInt(process.env.TRUST_PROXY_COUNT || '2', 10)); // Adjust based on your proxy setup, ensure integer
 
 
 // --- Rate Limiter ---
