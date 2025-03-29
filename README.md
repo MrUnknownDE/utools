@@ -68,7 +68,6 @@ This method uses the Docker images automatically built and pushed to GitHub Cont
           PORT: 3000
           LOG_LEVEL: info # Adjust log level if needed (e.g., 'debug', 'warn')
           PING_COUNT: 4
-          # MaxMind DB paths are set within the image, no need to override usually
         dns:
           # Explicitly set reliable public DNS servers for rDNS lookups inside the container
           - 1.1.1.1    # Cloudflare DNS
