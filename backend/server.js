@@ -524,7 +524,7 @@ app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir strea
 
 // Lookup Endpunkt für beliebige IP
 app.get('/api/lookup', async (req, res) => {
-    // Debuggin-Logs
+    // Debug-Logs
     logger.debug({ queryParams: req.query }, 'Received query parameters for lookup');
 
     const targetIpRaw = req.query.targetIp; // IP kommt jetzt als Query-Parameter 'ip'
@@ -632,9 +632,6 @@ const signals = { 'SIGINT': 2, 'SIGTERM': 15 };
 Object.keys(signals).forEach((signal) => {
   process.on(signal, () => {
     logger.info(`Received ${signal}, shutting down gracefully...`);
-    // Hier könnten noch offene Verbindungen geschlossen werden etc.
-    // z.B. server.close(() => { logger.info('HTTP server closed.'); process.exit(128 + signals[signal]); });
-    // Für dieses Beispiel beenden wir direkt:
     process.exit(128 + signals[signal]);
   });
 });

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP Info & Diagnostics</title>
+    <!-- Tailwind CSS Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    <!-- Eigene Styles -->
+    <style>
+        /* Container für Karten müssen eine Höhe haben */
+        #map { height: 300px; }
+        #lookup-map { height: 250px; } /* Höhe für Lookup-Karte */
+
+        /* Einfacher Lade-Spinner (Tailwind animiert) */
+        .loader {
+            border: 4px solid rgba(168, 85, 247, 0.3); /* Lila transparent */
+            border-left-color: #a855f7; /* Lila */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Basis für Glitch-Effekt (Beispiel: Text-Schatten) */
+        .glitch-text:hover {
+            text-shadow:
+                1px 1px 0px rgba(168, 85, 247, 0.7), /* Lila */
+                -1px -1px 0px rgba(76, 29, 149, 0.7); /* Dunkleres Lila */
+        }
+        /* Klickbarer IP-Cursor */
+        #ip-address { cursor: pointer; }
+
+        /* Traceroute Output Formatierung */
+        #traceroute-output pre {
+            white-space: pre-wrap; /* Zeilenumbruch */
+            word-break: break-all; /* Lange Zeilen umbrechen */
+            font-family: monospace;
+            background-color: #1f2937; /* Dunkelgrau */
+            color: #d1d5db; /* Hellgrau */
+            padding: 1rem;
+            border-radius: 0.375rem; /* rounded-md */
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        #traceroute-output .hop-line { margin-bottom: 0.25rem; font-size: 0.875rem; } /* text-sm */
+        #traceroute-output .hop-number { display: inline-block; width: 30px; text-align: right; margin-right: 10px; color: #9ca3af; } /* Grau */
+        #traceroute-output .hop-ip { color: #60a5fa; } /* Blau */
+        #traceroute-output .hop-hostname { color: #a78bfa; } /* Lila */
+        #traceroute-output .hop-rtt { color: #34d399; margin-left: 5px;} /* Grün */
+        #traceroute-output .hop-timeout { color: #f87171; } /* Rot */
+        #traceroute-output .info-line { color: #fbbf24; font-style: italic;} /* Gelb */
+        #traceroute-output .error-line { color: #f87171; font-weight: bold;} /* Rot */
+        #traceroute-output .end-line { color: #a78bfa; font-weight: bold; margin-top: 10px;} /* Lila */
+
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 font-sans p-4 md:p-8">
+
+    <div class="container mx-auto max-w-4xl bg-gray-800 rounded-lg shadow-xl p-6">
+
+        <h1 class="text-3xl font-bold mb-6 text-purple-400 glitch-text text-center">IP Information & Diagnostics</h1>
+
+        <!-- Bereich für EIGENE IP-Infos -->
+        <div id="info-section" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+
+            <!-- Linke Spalte: Eigene IP, Geo, ASN, rDNS -->
+            <div class="space-y-4 p-4 bg-gray-700 rounded">
+                <h2 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-1">Your Public IP</h2>
+                <div id="ip-info" class="min-h-[50px]">
+                    <div id="ip-loader" class="loader"></div>
+                    <p id="ip-address" class="text-2xl font-mono font-bold text-purple-400 break-all hidden" title="Click to start Traceroute"></p>
+                </div>
+
+                <h2 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-1">Geolocation</h2>
+                <div id="geo-info" class="min-h-[100px] space-y-1 text-sm">
+                    <div id="geo-loader" class="loader"></div>
+                    <div class="hidden"> <!-- Hide data until loaded -->
+                        <p><strong>Country:</strong> <span id="country">-</span></p>
+                        <p><strong>Region:</strong> <span id="region">-</span></p>
+                        <p><strong>City:</strong> <span id="city">-</span></p>
+                        <p><strong>Postal Code:</strong> <span id="postal">-</span></p>
+                        <p><strong>Coordinates:</strong> <span id="coords">-</span></p>
+                        <p><strong>Timezone:</strong> <span id="timezone">-</span></p>
+                        <p id="geo-error" class="text-red-400"></p>
+                    </div>
+                </div>
+
+                <h2 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-1">ASN</h2>
+                <div id="asn-info" class="min-h-[50px] space-y-1 text-sm">
+                     <div id="asn-loader" class="loader"></div>
+                     <div class="hidden"> <!-- Hide data until loaded -->
+                        <p><strong>Number:</strong> <span id="asn-number">-</span></p>
+                        <p><strong>Organization:</strong> <span id="asn-org">-</span></p>
+                        <p id="asn-error" class="text-red-400"></p>
+                     </div>
+                </div>
+
+                 <h2 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-1">Reverse DNS (rDNS)</h2>
+                <div id="rdns-info" class="min-h-[50px] space-y-1 text-sm">
+                     <div id="rdns-loader" class="loader"></div>
+                     <div class="hidden"> <!-- Hide data until loaded -->
+                         <ul id="rdns-list" class="list-disc list-inside"><li>-</li></ul>
+                         <p id="rdns-error" class="text-red-400"></p>
+                     </div>
+                </div>
+            </div>
+
+            <!-- Rechte Spalte: Eigene Karte -->
+            <div class="space-y-4 p-4 bg-gray-700 rounded">
+                 <h2 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-1">Your Location Map</h2>
+                 <div id="map-container" class="bg-gray-600 rounded min-h-[300px] flex items-center justify-center relative">
+                     <div id="map-loader" class="loader absolute"></div>
+                     <div id="map" class="w-full rounded hidden"></div>
+                     <p id="map-message" class="text-gray-400 hidden absolute">Could not load map.</p>
+                 </div>
+            </div>
+        </div>
+
+        <!-- Bereich für IP Lookup -->
+        <div class="mt-8 p-4 bg-gray-700 rounded">
+            <h2 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-1 mb-4">IP Address Lookup</h2>
+            <div class="flex flex-col sm:flex-row gap-2 mb-4">
+                <input type="text" id="lookup-ip-input" placeholder="Enter IP address (e.g., 8.8.8.8)"
+                       class="flex-grow px-3 py-2 bg-gray-800 border border-gray-600 rounded text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono">
+                <button id="lookup-button"
+                        class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out">
+                    Lookup
+                </button>
+            </div>
+            <div id="lookup-error" class="text-red-400 mb-4 hidden"></div>
+
+            <!-- Ergebnisse des Lookups (initial versteckt) -->
+            <div id="lookup-results-section" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6 mt-4 border-t border-gray-600 pt-4">
+                 <!-- Linke Spalte: IP, Geo, ASN, rDNS -->
+                 <div class="space-y-4">
+                    <h3 class="text-lg font-semibold text-purple-300">Lookup Result for: <span id="lookup-ip-address" class="font-mono text-purple-400"></span></h3>
+                    <div id="lookup-result-loader" class="loader hidden"></div> <!-- Loader für den gesamten Block -->
+
+                    <div id="lookup-geo-info" class="space-y-1 text-sm">
+                        <h4 class="font-semibold text-purple-300">Geolocation</h4>
+                        <p><strong>Country:</strong> <span id="lookup-country">-</span></p>
+                        <p><strong>Region:</strong> <span id="lookup-region">-</span></p>
+                        <p><strong>City:</strong> <span id="lookup-city">-</span></p>
+                        <p><strong>Postal Code:</strong> <span id="lookup-postal">-</span></p>
+                        <p><strong>Coordinates:</strong> <span id="lookup-coords">-</span></p>
+                        <p><strong>Timezone:</strong> <span id="lookup-timezone">-</span></p>
+                        <p id="lookup-geo-error" class="text-red-400"></p>
+                    </div>
+
+                    <div id="lookup-asn-info" class="space-y-1 text-sm">
+                        <h4 class="font-semibold text-purple-300">ASN</h4>
+                        <p><strong>Number:</strong> <span id="lookup-asn-number">-</span></p>
+                        <p><strong>Organization:</strong> <span id="lookup-asn-org">-</span></p>
+                        <p id="lookup-asn-error" class="text-red-400"></p>
+                    </div>
+
+                    <div id="lookup-rdns-info" class="space-y-1 text-sm">
+                        <h4 class="font-semibold text-purple-300">Reverse DNS (rDNS)</h4>
+                        <ul id="lookup-rdns-list" class="list-disc list-inside"><li>-</li></ul>
+                        <p id="lookup-rdns-error" class="text-red-400"></p>
+                    </div>
+                 </div>
+
+                 <!-- Rechte Spalte: Karte & Aktionen -->
+                 <div class="space-y-4">
+                    <h4 class="font-semibold text-purple-300">Location Map</h4>
+                    <div id="lookup-map-container" class="bg-gray-600 rounded min-h-[250px] flex items-center justify-center relative">
+                         <div id="lookup-map-loader" class="loader hidden absolute"></div>
+                         <div id="lookup-map" class="w-full rounded hidden"></div> <!-- Höhe via CSS -->
+                         <p id="lookup-map-message" class="text-gray-400 hidden absolute">Could not load map.</p>
+                     </div>
+                     <!-- Optional: Buttons für Ping/Trace für diese IP -->
+                     <div class="mt-4 space-x-2">
+                         <button id="lookup-ping-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed" disabled>Ping this IP</button>
+                         <button id="lookup-trace-button" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-1 px-3 rounded text-sm transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed" disabled>Trace this IP</button>
+                     </div>
+                     <!-- Bereich für Ping-Ergebnisse (Lookup) -->
+                     <div id="lookup-ping-results" class="mt-2 text-sm hidden">
+                         <h4 class="font-semibold text-purple-300">Ping Results</h4>
+                         <div id="lookup-ping-loader" class="loader hidden"></div>
+                         <pre id="lookup-ping-output" class="mt-1 whitespace-pre-wrap break-all font-mono bg-gray-900 text-gray-300 p-2 rounded text-xs"></pre>
+                         <p id="lookup-ping-error" class="text-red-400"></p>
+                     </div>
+                 </div>
+            </div>
+        </div>
+
+
+        <!-- Bereich für Traceroute -->
+        <div id="traceroute-section" class="mt-8 p-4 bg-gray-700 rounded hidden">
+             <h2 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-1 mb-4">Traceroute Results</h2>
+             <div id="traceroute-status" class="flex items-center mb-2">
+                 <div id="traceroute-loader" class="loader mr-2 hidden"></div>
+                 <span id="traceroute-message" class="text-gray-400"></span>
+             </div>
+             <div id="traceroute-output"><pre></pre></div>
+        </div>
+
+        <!-- Globaler Fehlerbereich -->
+        <div id="global-error" class="mt-6 p-4 bg-red-800 text-red-100 rounded hidden"></div>
+
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    <!-- Eigene JS-Logik -->
+    <script src="script.js"></script>
+</body>
+</html>
