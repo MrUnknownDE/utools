@@ -101,6 +101,47 @@ function executeCommand(command, args) {
 }
 
 
+/**
+ * Prüft, ob eine IP-Adresse im privaten, Loopback- oder Link-Local-Bereich liegt.
+ * @param {string} ip - Die zu prüfende IP-Adresse (bereits validiert).
+ * @returns {boolean} True, wenn die IP privat/lokal ist, sonst false.
+ */
+function isPrivateIp(ip) {
+    if (!ip) return false; // Sollte durch isValidIp vorher abgefangen werden
+
+    const ipVersion = net.isIP(ip); // Gibt 4 oder 6 zurück
+
+    if (ipVersion === 4) {
+        const parts = ip.split('.').map(Number);
+        return (
+            // 10.0.0.0/8
+            parts[0] === 10 ||
+            // 172.16.0.0/12
+            (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+            // 192.168.0.0/16
+            (parts[0] === 192 && parts[1] === 168) ||
+            // 127.0.0.0/8 (Loopback)
+            parts[0] === 127 ||
+            // 169.254.0.0/16 (Link-local)
+            (parts[0] === 169 && parts[1] === 254)
+        );
+    } else if (ipVersion === 6) {
+        const lowerCaseIp = ip.toLowerCase();
+        return (
+            // ::1/128 (Loopback)
+            lowerCaseIp === '::1' ||
+            // fc00::/7 (Unique Local Addresses)
+            lowerCaseIp.startsWith('fc') || lowerCaseIp.startsWith('fd') ||
+            // fe80::/10 (Link-local)
+            lowerCaseIp.startsWith('fe8') || lowerCaseIp.startsWith('fe9') ||
+            lowerCaseIp.startsWith('fea') || lowerCaseIp.startsWith('feb')
+        );
+    }
+
+    // Wenn net.isIP 0 zurückgibt (sollte nicht passieren nach isValidIp)
+    return false;
+}
+
 // --- Initialisierung (MaxMind DBs laden) ---
 async function initialize() {
     try {
@@ -194,13 +235,20 @@ app.get('/api/ping', async (req, res) => {
     console.log(`--- PING Request ---`);
     console.log(`Value of targetIp: "${targetIp}"`);
 
-    const isValidResult = isValidIp(targetIp); // Verwendet jetzt die neue isValidIp
+    const isValidResult = isValidIp(targetIp);
     console.log(`isValidIp (net) result for "${targetIp}": ${isValidResult}`);
 
     if (!isValidResult) {
         console.log(`isValidIp (net) returned false for "${targetIp}", sending 400.`);
         return res.status(400).json({ error: 'Invalid target IP address provided.' });
     }
+
+    // --- NEUE PRÜFUNG AUF PRIVATE IP ---
+    if (isPrivateIp(targetIp)) {
+        console.log(`Target IP "${targetIp}" is private/local. Aborting ping.`);
+        return res.status(403).json({ error: 'Operations on private or local IP addresses are not allowed.' });
+    }
+    // --- ENDE NEUE PRÜFUNG ---
 
     try {
         console.log(`Proceeding to execute ping for "${targetIp}"...`);
@@ -227,13 +275,20 @@ app.get('/api/traceroute', async (req, res) => {
     console.log(`--- TRACEROUTE Request ---`);
     console.log(`Value of targetIp: "${targetIp}"`);
 
-    const isValidResult = isValidIp(targetIp); // Verwendet jetzt die neue isValidIp
+    const isValidResult = isValidIp(targetIp);
     console.log(`isValidIp (net) result for "${targetIp}": ${isValidResult}`);
 
     if (!isValidResult) {
         console.log(`isValidIp (net) returned false for "${targetIp}", sending 400.`);
         return res.status(400).json({ error: 'Invalid target IP address provided.' });
     }
+
+    // --- NEUE PRÜFUNG AUF PRIVATE IP ---
+    if (isPrivateIp(targetIp)) {
+        console.log(`Target IP "${targetIp}" is private/local. Aborting traceroute.`);
+        return res.status(403).json({ error: 'Operations on private or local IP addresses are not allowed.' });
+    }
+    // --- ENDE NEUE PRÜFUNG ---
 
     try {
         console.log(`Proceeding to execute traceroute for "${targetIp}"...`);
