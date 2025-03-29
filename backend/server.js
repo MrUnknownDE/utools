@@ -212,7 +212,17 @@ app.get('/api/ipinfo', async (req, res) => {
 app.get('/api/ping', async (req, res) => {
     const targetIp = req.query.targetIp;
 
+    // --- DEBUGGING START ---
+    console.log(`--- PING Request ---`);
+    console.log(`Raw req.query.targetIp:`, req.query.targetIp);
+    console.log(`Type of targetIp:`, typeof targetIp);
+    console.log(`Value of targetIp before validation: "${targetIp}"`);
+    // --- DEBUGGING END ---
+
     if (!isValidIp(targetIp)) {
+        // --- DEBUGGING START ---
+        console.log(`isValidIp returned false for "${targetIp}"`);
+        // --- DEBUGGING END ---
         return res.status(400).json({ error: 'Invalid target IP address provided.' });
     }
 
