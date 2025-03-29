@@ -33,6 +33,7 @@ const lookupRoutes = require('./routes/lookup');
 const dnsLookupRoutes = require('./routes/dnsLookup');
 const whoisLookupRoutes = require('./routes/whoisLookup');
 const versionRoutes = require('./routes/version');
+const sslCheckRoutes = require('./routes/sslCheck'); // <-- NEUE ROUTE IMPORTIERT
 
 // --- Logger Initialisierung ---
 const logger = pino({
@@ -94,6 +95,7 @@ app.use('/api/traceroute', generalLimiter);
 app.use('/api/lookup', generalLimiter);
 app.use('/api/dns-lookup', generalLimiter);
 app.use('/api/whois-lookup', generalLimiter);
+app.use('/api/ssl-check', generalLimiter); // <-- RATE LIMITER FÜR NEUE ROUTE
 
 
 // --- API Routes ---
@@ -105,6 +107,7 @@ app.use('/api/lookup', lookupRoutes);
 app.use('/api/dns-lookup', dnsLookupRoutes);
 app.use('/api/whois-lookup', whoisLookupRoutes);
 app.use('/api/version', versionRoutes);
+app.use('/api/ssl-check', sslCheckRoutes); // <-- NEUE ROUTE REGISTRIERT
 
 
 // --- Sentry Error Handler ---
