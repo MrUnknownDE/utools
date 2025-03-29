@@ -10,7 +10,7 @@ A modern web application that displays detailed information about a client's IP 
 <!-- Optional: Füge hier einen Screenshot hinzu -->
 <!-- ![Screenshot](link/to/your/screenshot.png) -->
 
-### Livedemo: https://ip.johanneskr.de
+### Livedemo: https://utools.johanneskr.de
 
 ## 🚀 Features
 
