@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const lookupIpInput = document.getElementById('lookup-ip-input');
     const lookupButton = document.getElementById('lookup-button');
     const lookupErrorEl = document.getElementById('lookup-error');
+    const lookupStatusEl = document.getElementById('lookup-status'); // Optional: für Statusmeldungen wie "Resolving..."
     const lookupResultsSection = document.getElementById('lookup-results-section');
     const lookupIpAddressEl = document.getElementById('lookup-ip-address');
     const lookupResultLoader = document.getElementById('lookup-result-loader');
@@ -93,6 +94,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!globalErrorEl) return;
         globalErrorEl.classList.add('hidden');
     }
+
+    /**
+     * Prüft, ob der String eine gültige IPv4 oder IPv6 Adresse ist.
+     * @param {string} input - Der zu prüfende String.
+     * @returns {boolean} True, wenn es eine gültige IP ist, sonst false.
+     */
+    function isValidIpAddress(input) {
+        if (!input || typeof input !== 'string') return false;
+        const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+        // Sehr einfache IPv6 Regex (erkennt gültige Zeichen, aber nicht alle komplexen Formate perfekt)
+        const ipv6Regex = /^[a-fA-F0-9:]+$/;
+        // Komplexere IPv6 Regex (versucht mehr Fälle abzudecken, aber immer noch nicht perfekt)
+        const complexIpv6Regex = /^(?:(?:[a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}|(?:[a-fA-F0-9]{1,4}:){1,7}:|(?:[a-fA-F0-9]{1,4}:){1,6}:[a-fA-F0-9]{1,4}|(?:[a-fA-F0-9]{1,4}:){1,5}(?::[a-fA-F0-9]{1,4}){1,2}|(?:[a-fA-F0-9]{1,4}:){1,4}(?::[a-fA-F0-9]{1,4}){1,3}|(?:[a-fA-F0-9]{1,4}:){1,3}(?::[a-fA-F0-9]{1,4}){1,4}|(?:[a-fA-F0-9]{1,4}:){1,2}(?::[a-fA-F0-9]{1,4}){1,5}|[a-fA-F0-9]{1,4}:(?:(?::[a-fA-F0-9]{1,4}){1,6})|:(?:(?::[a-fA-F0-9]{1,4}){1,7}|:)|fe80:(?::[a-fA-F0-9]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(?:ffff(?::0{1,4}){0,1}:){0,1}(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])|(?:[a-fA-F0-9]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
+
+        return ipv4Regex.test(input) || complexIpv6Regex.test(input);
+    }
+
 
     /**
      * Aktualisiert ein Info-Feld und versteckt optional einen Loader.
@@ -306,6 +324,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!lookupErrorEl) return;
         lookupErrorEl.textContent = `Error: ${message}`;
         lookupErrorEl.classList.remove('hidden');
+        // Hide status message if error occurs
+        if (lookupStatusEl) lookupStatusEl.classList.add('hidden');
     }
 
     /** Versteckt Fehler im Lookup-Bereich */
@@ -313,6 +333,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!lookupErrorEl) return;
         lookupErrorEl.classList.add('hidden');
     }
+
+    /** Zeigt eine Statusmeldung im Lookup-Bereich an */
+    function showLookupStatus(message) {
+        if (!lookupStatusEl) return;
+        lookupStatusEl.textContent = message;
+        lookupStatusEl.classList.remove('hidden');
+        hideLookupError(); // Hide errors when showing status
+    }
+
+    /** Versteckt die Statusmeldung im Lookup-Bereich */
+    function hideLookupStatus() {
+        if (!lookupStatusEl) return;
+        lookupStatusEl.classList.add('hidden');
+    }
+
 
      /** Setzt den Lookup-Ergebnisbereich zurück */
      function resetLookupResults() {
@@ -326,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (lookupPingLoader) lookupPingLoader.classList.add('hidden');
         if (lookupPingOutputEl) lookupPingOutputEl.textContent = '';
         if (lookupPingErrorEl) lookupPingErrorEl.textContent = '';
+        hideLookupStatus(); // Hide status on reset
 
         const fieldsToClear = [
             lookupIpAddressEl, lookupCountryEl, lookupRegionEl, lookupCityEl,
@@ -348,7 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /** Ruft Informationen für eine spezifische IP ab */
     async function fetchLookupInfo(ipToLookup) {
-        resetLookupResults();
+        resetLookupResults(); // Reset before showing new results/loaders
         hideLookupError();
         hideGlobalError();
         if (!lookupResultsSection || !lookupResultLoader || !lookupMapLoader) return; // Exit if elements missing
@@ -356,6 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
         lookupResultsSection.classList.remove('hidden');
         lookupResultLoader.classList.remove('hidden');
         lookupMapLoader.classList.remove('hidden'); // Show map loader initially
+        hideLookupStatus(); // Hide status like "Resolving..."
 
         try {
             const response = await fetch(`${API_BASE_URL}/lookup?targetIp=${encodeURIComponent(ipToLookup)}`); // Use targetIp parameter
@@ -366,9 +403,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             console.log(`Received Lookup Info for ${ipToLookup}:`, data);
-            currentLookupIp = data.ip;
+            currentLookupIp = data.ip; // Store the IP that was actually looked up
 
-            updateField(lookupIpAddressEl, data.ip);
+            updateField(lookupIpAddressEl, data.ip); // Display the looked-up IP
             updateField(lookupCountryEl, data.geo?.countryName ? `${data.geo.countryName} (${data.geo.country})` : null, null, lookupGeoErrorEl);
             updateField(lookupRegionEl, data.geo?.region);
             updateField(lookupCityEl, data.geo?.city);
@@ -388,19 +425,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error(`Failed to fetch lookup info for ${ipToLookup}:`, error);
-            showLookupError(`${error.message}`);
+            showLookupError(`Lookup failed: ${error.message}`);
             if (lookupMapMessageEl) {
                 lookupMapMessageEl.textContent = 'Map could not be loaded due to an error.';
                 lookupMapMessageEl.classList.remove('hidden');
             }
             if (lookupMapEl) lookupMapEl.classList.add('hidden');
             if (lookupMapLoader) lookupMapLoader.classList.add('hidden'); // Hide loader on error
+            resetLookupResults(); // Hide the section again on error
 
         } finally {
              if (lookupResultLoader) lookupResultLoader.classList.add('hidden'); // Hide main loader
              // Map loader is handled by initOrUpdateMap
         }
     }
+
+    /**
+     * Löst einen Domainnamen zu einer IP-Adresse auf (bevorzugt IPv4).
+     * @param {string} domain - Der aufzulösende Domainname.
+     * @returns {Promise<string|null>} Eine Promise, die mit der IP-Adresse oder null aufgelöst wird.
+     */
+    async function resolveDomainToIp(domain) {
+        console.log(`Attempting to resolve domain: ${domain}`);
+        try {
+            // 1. Versuche A Record (IPv4)
+            let response = await fetch(`${API_BASE_URL}/dns-lookup?domain=${encodeURIComponent(domain)}&type=A`);
+            let data = await response.json();
+
+            if (response.ok && data.success && data.records && Array.isArray(data.records) && data.records.length > 0) {
+                console.log(`Resolved ${domain} to IPv4: ${data.records[0]}`);
+                return data.records[0]; // Nimm die erste IPv4-Adresse
+            }
+
+            // 2. Wenn kein A-Record, versuche AAAA Record (IPv6)
+            console.log(`No A record found for ${domain}, trying AAAA.`);
+            response = await fetch(`${API_BASE_URL}/dns-lookup?domain=${encodeURIComponent(domain)}&type=AAAA`);
+            data = await response.json();
+
+            if (response.ok && data.success && data.records && Array.isArray(data.records) && data.records.length > 0) {
+                console.log(`Resolved ${domain} to IPv6: ${data.records[0]}`);
+                return data.records[0]; // Nimm die erste IPv6-Adresse
+            }
+
+            // 3. Wenn beides fehlschlägt oder keine Records gefunden wurden
+            console.warn(`Could not resolve domain ${domain} to an IP address.`);
+            throw new Error(data.error || 'No A or AAAA records found.');
+
+        } catch (error) {
+            console.error(`DNS resolution failed for ${domain}:`, error);
+            throw new Error(`Could not resolve domain: ${error.message}`);
+        }
+    }
+
 
     // --- Ping Function (for Lookup) ---
     async function runLookupPing(ip) {
@@ -589,16 +665,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function handleLookupClick() {
+    async function handleLookupClick() {
         if (!lookupIpInput) return;
-        const ipToLookup = lookupIpInput.value.trim();
-        if (!ipToLookup) {
-            showLookupError('Please enter an IP address.');
+        const query = lookupIpInput.value.trim();
+        if (!query) {
+            showLookupError('Please enter an IP address or domain name.');
             return;
         }
-        console.log(`Lookup button clicked for IP: ${ipToLookup}`);
-        fetchLookupInfo(ipToLookup);
+
+        resetLookupResults(); // Reset results before starting
+        hideLookupError();
+
+        if (isValidIpAddress(query)) {
+            // Input is an IP address
+            console.log(`Lookup button clicked for IP: ${query}`);
+            fetchLookupInfo(query);
+        } else {
+            // Input is likely a domain name
+            console.log(`Lookup button clicked for domain: ${query}`);
+            showLookupStatus(`Resolving domain ${query}...`); // Show status
+            try {
+                const resolvedIp = await resolveDomainToIp(query);
+                if (resolvedIp) {
+                    console.log(`Domain ${query} resolved to ${resolvedIp}. Fetching lookup info...`);
+                    // Optional: Update input field with resolved IP? Maybe not, keep original query.
+                    // lookupIpInput.value = resolvedIp;
+                    fetchLookupInfo(resolvedIp); // Fetch info for the resolved IP
+                } else {
+                     // Should be caught by the error in resolveDomainToIp, but as a fallback:
+                     showLookupError(`Could not resolve domain ${query} to an IP address.`);
+                }
+            } catch (error) {
+                showLookupError(error.message); // Display resolution error
+            } finally {
+                 hideLookupStatus(); // Hide status message regardless of outcome
+            }
+        }
     }
+
 
      function handleLookupPingClick() {
          if (currentLookupIp) {
