@@ -14,8 +14,7 @@ RUN rm /etc/nginx/conf.d/default.conf
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Kopiere die Frontend-Dateien in das Verzeichnis, das Nginx ausliefert
-COPY index.html .
-COPY script.js .
+COPY app/ .
 # Falls du später CSS-Dateien oder Bilder hast, kopiere sie auch:
 # COPY styles.css .
 # COPY images/ ./images
