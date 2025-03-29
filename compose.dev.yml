@@ -42,7 +42,7 @@ services:
     ports:
       # Mappe Port 8080 vom Host auf Port 80 im Container (wo Nginx lauscht)
       # Zugriff von außen (Browser) erfolgt über localhost:8080
-      - "8080:80"
+      - "5874:80"
     depends_on:
       - backend-dev # Stellt sicher, dass Backend gestartet wird (aber nicht unbedingt bereit ist)
     networks:
