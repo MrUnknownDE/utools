@@ -14,6 +14,7 @@ COPY package*.json ./
 # Install app dependencies using npm ci for faster, reliable builds
 # --only=production installs only production dependencies
 RUN npm ci --only=production
+RUN npm i oui
 
 # Stage 2: Production Image
 FROM node:18-alpine
