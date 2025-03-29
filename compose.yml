@@ -18,6 +18,11 @@ services:
       # Mappe Port 3000 vom Host auf Port 3000 im Container
       # Zugriff von außen (Browser) erfolgt über localhost:3000
       - "3000:3000"
+    dns:
+      - 1.1.1.1    # Cloudflare DNS
+      - 1.0.0.1    # Cloudflare DNS
+      - 8.8.8.8    # Google DNS
+      - 8.8.4.4    # Google DNS
     networks:
       - ip_tool_network # Verbinde mit unserem benutzerdefinierten Netzwerk
 
