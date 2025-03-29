@@ -194,7 +194,7 @@
                      </tbody>
                  </table>
              </div>
-             <p class="mt-4 text-xs text-gray-400">Klicken Sie auf "Beispiel", um die Felder oben auszufüllen.</p>
+             <p class="mt-4 text-xs text-gray-400">Klicken Sie auf "Beispiel", um die Felder oben auszufüllen und die Berechnung zu starten.</p>
         </div>
 
     </div>
@@ -214,8 +214,8 @@
                     const cidr = event.target.getAttribute('data-cidr');
                     document.getElementById('ip-address').value = ip;
                     document.getElementById('cidr').value = cidr;
-                    // Optional: Berechnung direkt auslösen
-                    // document.getElementById('subnet-form').dispatchEvent(new Event('submit'));
+                    // Berechnung direkt auslösen
+                    document.getElementById('subnet-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
                     window.scrollTo({ top: 0, behavior: 'smooth' }); // Nach oben scrollen
                 });
             });
