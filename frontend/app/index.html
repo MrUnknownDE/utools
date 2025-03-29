@@ -35,8 +35,14 @@
                 1px 1px 0px rgba(168, 85, 247, 0.7), /* Lila */
                 -1px -1px 0px rgba(76, 29, 149, 0.7); /* Dunkleres Lila */
         }
-        /* Klickbarer IP-Cursor */
-        #ip-address { cursor: pointer; }
+        /* Klickbarer IP-Cursor und Link-Styling */
+        #ip-address-link {
+             cursor: pointer;
+             text-decoration: none; /* Standard-Link-Unterstreichung entfernen */
+        }
+        #ip-address-link:hover {
+            text-decoration: underline; /* Unterstreichung beim Hover */
+        }
 
         /* Traceroute Output Formatierung */
         #traceroute-output pre, .result-pre { /* Gemeinsamer Stil für <pre> */
@@ -103,7 +109,10 @@
                 <h2 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-1">Your Public IP</h2>
                 <div id="ip-info" class="min-h-[50px]">
                     <div id="ip-loader" class="loader"></div>
-                    <p id="ip-address" class="text-2xl font-mono font-bold text-purple-400 break-all hidden" title="Click to start Traceroute"></p>
+                    <!-- Geändert zu <a> Tag -->
+                    <a id="ip-address-link" href="#" class="text-2xl font-mono font-bold text-purple-400 break-all hidden" title="Go to WHOIS Lookup for this IP">
+                        <span id="ip-address"></span> <!-- Span für den eigentlichen Text -->
+                    </a>
                 </div>
 
                 <h2 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-1">Geolocation</h2>

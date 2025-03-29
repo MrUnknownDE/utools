@@ -1,7 +1,8 @@
 // script.js - Hauptlogik für index.html (IP Info, IP Lookup, Traceroute)
 document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Elements (User IP Info) ---
-    const ipAddressEl = document.getElementById('ip-address');
+    const ipAddressLinkEl = document.getElementById('ip-address-link'); // Geändert von ip-address
+    const ipAddressSpanEl = document.getElementById('ip-address'); // Das Span *innerhalb* des Links
     const countryEl = document.getElementById('country');
     const regionEl = document.getElementById('region');
     const cityEl = document.getElementById('city');
@@ -227,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hideGlobalError();
         [ipLoader, geoLoader, asnLoader, rdnsLoader, mapLoader].forEach(l => l?.classList.remove('hidden'));
         // Hide data elements initially (containers are hidden by default in HTML)
-        if (ipAddressEl) ipAddressEl.classList.add('hidden');
+        if (ipAddressLinkEl) ipAddressLinkEl.classList.add('hidden'); // Hide link initially
         if (mapEl) mapEl.classList.add('hidden');
         // Ensure map message is hidden initially
         if (mapMessageEl) mapMessageEl.classList.add('hidden');
@@ -240,10 +241,16 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Received User IP Info:', data);
 
             currentIp = data.ip;
-            updateField(ipAddressEl, data.ip, ipLoader);
-            if (ipAddressEl) {
-                ipAddressEl.classList.remove('hidden'); // Show IP element
-                if (data.ip) ipAddressEl.addEventListener('click', handleIpClick);
+            // Update the span inside the link
+            updateField(ipAddressSpanEl, data.ip, ipLoader);
+            if (ipAddressLinkEl) {
+                ipAddressLinkEl.classList.remove('hidden'); // Show link element
+                if (data.ip) {
+                    // Remove old listener if it exists (safety)
+                    ipAddressLinkEl.removeEventListener('click', handleIpClick);
+                    // Add new listener
+                    ipAddressLinkEl.addEventListener('click', handleIpClick);
+                }
             }
 
             updateField(countryEl, data.geo?.countryName ? `${data.geo.countryName} (${data.geo.country})` : null, null, geoErrorEl);
@@ -572,10 +579,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Handlers ---
     function handleIpClick(event) {
-        event.preventDefault();
+        event.preventDefault(); // Verhindert das Standardverhalten des Links (#)
         if (currentIp) {
-            console.log(`User IP clicked: ${currentIp}. Starting traceroute...`);
-            startTraceroute(currentIp);
+            console.log(`User IP link clicked: ${currentIp}. Redirecting to WHOIS lookup...`);
+            // Leite zur Whois-Seite weiter und übergebe die IP als 'query'-Parameter
+            window.location.href = `whois-lookup.html?query=${encodeURIComponent(currentIp)}`;
+        } else {
+            console.warn('Cannot redirect to WHOIS: current IP is not available.');
         }
     }
 
@@ -615,5 +625,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (lookupPingButton) lookupPingButton.addEventListener('click', handleLookupPingClick);
     if (lookupTraceButton) lookupTraceButton.addEventListener('click', handleLookupTraceClick);
+
+    // Der Event Listener für den IP-Link wird jetzt in fetchIpInfo() hinzugefügt,
+    // nachdem die IP erfolgreich abgerufen wurde.
 
 }); // End DOMContentLoaded

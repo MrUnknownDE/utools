@@ -92,12 +92,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- WHOIS Lookup Specific Functions ---
     function displayWhoisResults(data, outputEl) {
-        // WHOIS data can be large and unstructured, display as JSON or raw text
-        // Using JSON.stringify for consistency, but raw text might be better depending on the library's output
+        // WHOIS data can be large and unstructured, display as raw text
         if (typeof data.result === 'string') {
-             outputEl.textContent = data.result; // Display raw text if it's a string
+             outputEl.textContent = data.result; // Display raw text
         } else {
-             outputEl.textContent = JSON.stringify(data.result, null, 2); // Display JSON otherwise
+             // Fallback if the result is not a string (shouldn't happen with current backend)
+             outputEl.textContent = JSON.stringify(data.result, null, 2);
         }
     }
 
@@ -120,6 +120,18 @@ document.addEventListener('DOMContentLoaded', () => {
         );
     }
 
+    /** Prüft URL-Parameter und startet ggf. den Lookup */
+    function checkUrlParamsAndLookup() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryFromUrl = urlParams.get('query');
+
+        if (queryFromUrl && whoisQueryInput) {
+            console.log(`Found query parameter in URL: ${queryFromUrl}`);
+            whoisQueryInput.value = queryFromUrl; // Set input field value
+            handleWhoisLookupClick(); // Trigger the lookup
+        }
+    }
+
     // --- Initial Load & Event Listeners ---
     fetchVersionInfo(); // Lade Versionsinfo für Footer
 
@@ -127,5 +139,8 @@ document.addEventListener('DOMContentLoaded', () => {
     whoisQueryInput.addEventListener('keypress', (event) => {
         if (event.key === 'Enter') handleWhoisLookupClick();
     });
+
+    // Prüfe URL-Parameter nach dem Setup der Listener
+    checkUrlParamsAndLookup();
 
 }); // End DOMContentLoaded
