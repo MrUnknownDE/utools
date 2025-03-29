@@ -37,14 +37,12 @@ router.get('/', (req, res) => {
         return res.status(403).json({ success: false, error: 'Operations on private or local IP addresses are not allowed.' });
     }
 
-    const transaction = Sentry.startTransaction({
-        op: "traceroute.stream",
-        name: `/api/traceroute?targetIp=${targetIp}`,
-    });
-    Sentry.configureScope(scope => {
-        scope.setSpan(transaction);
-        scope.setContext("request", { ip: requestIp, targetIp });
-    });
+    // Get the transaction created by Sentry's tracingHandler middleware
+    const scope = Sentry.getCurrentScope();
+    const transaction = scope?.getTransaction();
+    // Add specific context for this request if needed
+    scope?.setContext("traceroute_details", { targetIp: targetIp });
+
 
     try {
         logger.info({ requestIp, targetIp }, `Starting traceroute stream...`);
@@ -61,10 +59,21 @@ router.get('/', (req, res) => {
 
         let buffer = '';
 
+        // Flag to ensure transaction is only finished once
+        let transactionFinished = false;
+        const finishTransaction = (status) => {
+            if (!transactionFinished && transaction) {
+                transaction.setStatus(status);
+                transaction.finish();
+                transactionFinished = true;
+                logger.debug({ requestIp, targetIp, status }, 'Sentry transaction finished.');
+            }
+        };
+
+
         const sendEvent = (event, data) => {
             try {
                 if (!res.writableEnded) {
-                    // Ensure error events always have a string in data.error
                     if (event === 'error' && (!data || typeof data.error !== 'string')) {
                          const safeErrorMessage = getErrorMessage(data?.error, 'Traceroute encountered an unspecified error.');
                          logger.warn({ requestIp, targetIp, originalData: data }, `Corrected invalid error event data. Sending: ${safeErrorMessage}`);
@@ -75,12 +84,13 @@ router.get('/', (req, res) => {
                      logger.warn({ requestIp, targetIp, event }, "Attempted to write to closed SSE stream.");
                 }
             } catch (e) {
+                // This catch handles errors during res.write, likely client disconnect
                 logger.error({ requestIp, targetIp, event, error: e.message }, "Error writing to SSE stream (client likely disconnected)");
                 Sentry.captureException(e, { level: 'warning', extra: { requestIp, targetIp, event } });
                 if (proc && !proc.killed) proc.kill();
                 if (!res.writableEnded) res.end();
-                transaction.setStatus('internal_error');
-                transaction.finish();
+                // Finish transaction here as well, as the request handling failed
+                finishTransaction('internal_error');
             }
         };
 
@@ -91,10 +101,10 @@ router.get('/', (req, res) => {
             lines.forEach(line => {
                 const parsed = parseTracerouteLine(line);
                 if (parsed) {
-                    logger.debug({ requestIp, targetIp, hop: parsed.hop, ip: parsed.ip }, 'Sending hop data');
+                    // logger.debug({ requestIp, targetIp, hop: parsed.hop, ip: parsed.ip }, 'Sending hop data');
                     sendEvent('hop', parsed);
                 } else if (line.trim()) {
-                     logger.debug({ requestIp, targetIp, message: line.trim() }, 'Sending info data');
+                     // logger.debug({ requestIp, targetIp, message: line.trim() }, 'Sending info data');
                      sendEvent('info', { message: line.trim() });
                 }
             });
@@ -104,17 +114,16 @@ router.get('/', (req, res) => {
             const errorMsg = getErrorMessage(data.toString().trim(), 'Traceroute produced unknown stderr output.');
             logger.warn({ requestIp, targetIp, stderr: errorMsg }, 'Traceroute stderr output');
             Sentry.captureMessage('Traceroute stderr output', { level: 'warning', extra: { requestIp, targetIp, stderr: errorMsg } });
-            sendEvent('error', { error: errorMsg }); // errorMsg is now guaranteed to be a string
+            sendEvent('error', { error: errorMsg });
         });
 
         proc.on('error', (err) => {
             const errorMsg = getErrorMessage(err, 'Failed to start traceroute command due to an unknown error.');
             logger.error({ requestIp, targetIp, error: errorMsg }, `Failed to start traceroute command`);
-            Sentry.captureException(err, { extra: { requestIp, targetIp } }); // Send original error to Sentry
-            sendEvent('error', { error: `Failed to start traceroute: ${errorMsg}` }); // Send safe message to client
+            Sentry.captureException(err, { extra: { requestIp, targetIp } });
+            sendEvent('error', { error: `Failed to start traceroute: ${errorMsg}` });
             if (!res.writableEnded) res.end();
-            transaction.setStatus('internal_error');
-            transaction.finish();
+            finishTransaction('internal_error'); // Finish transaction on process error
         });
 
         proc.on('close', (code) => {
@@ -124,42 +133,41 @@ router.get('/', (req, res) => {
                  else if (buffer.trim()) sendEvent('info', { message: buffer.trim() });
             }
 
+            let status = 'ok';
             if (code !== 0) {
                 const errorMsg = `Traceroute command failed with exit code ${code}`;
                 logger.error({ requestIp, targetIp, exitCode: code }, errorMsg);
                 Sentry.captureMessage('Traceroute command failed', { level: 'error', extra: { requestIp, targetIp, exitCode: code } });
-                sendEvent('error', { error: errorMsg }); // Send specific error message
-                transaction.setStatus('unknown_error');
+                sendEvent('error', { error: errorMsg });
+                status = 'unknown_error';
             } else {
                 logger.info({ requestIp, targetIp }, `Traceroute stream completed successfully.`);
-                transaction.setStatus('ok');
             }
              sendEvent('end', { exitCode: code });
              if (!res.writableEnded) res.end();
-             transaction.finish();
+             finishTransaction(status); // Finish transaction on process close
         });
 
         req.on('close', () => {
             logger.info({ requestIp, targetIp }, 'Client disconnected from traceroute stream, killing process.');
             if (proc && !proc.killed) proc.kill();
             if (!res.writableEnded) res.end();
-            transaction.setStatus('cancelled');
-            transaction.finish();
+            finishTransaction('cancelled'); // Finish transaction on client disconnect
         });
 
     } catch (error) {
+        // This catch handles errors during the initial setup (e.g., spawn fails immediately)
         const errorMsg = getErrorMessage(error, 'Failed to initiate traceroute due to an internal server error.');
         logger.error({ requestIp, targetIp, error: errorMsg, stack: error.stack }, 'Error setting up traceroute stream');
-        Sentry.captureException(error, { extra: { requestIp, targetIp } }); // Send original error to Sentry
-        transaction.setStatus('internal_error');
-        transaction.finish();
+        Sentry.captureException(error, { extra: { requestIp, targetIp } });
+        // Finish the transaction if an error occurs during setup
+        finishTransaction('internal_error');
 
         if (!res.headersSent) {
              res.status(500).json({ success: false, error: `Failed to initiate traceroute: ${errorMsg}` });
         } else {
              try {
                  if (!res.writableEnded) {
-                    // Use the safe sendEvent function here as well
                     sendEvent('error', { error: `Internal server error during setup: ${errorMsg}` });
                     res.end();
                  }
