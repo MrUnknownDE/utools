@@ -1,31 +1,28 @@
 // server.js
-require('dotenv').config(); // Lädt Variablen aus .env in process.env
+// Load .env variables FIRST!
+require('dotenv').config();
 
-// --- Sentry Initialisierung (GANZ OBEN!) ---
+// --- Sentry Initialisierung (GANZ OBEN, nach dotenv) ---
 const Sentry = require("@sentry/node");
-// Korrigierter Import für ProfilingIntegration
-const { nodeProfilingIntegration } = require("@sentry/profiling-node");
 
+// Initialize Sentry BEFORE requiring any other modules!
 Sentry.init({
-  // Ersetzen Sie dies durch Ihren echten Sentry DSN oder verwenden Sie die .env Datei
-  dsn: process.env.SENTRY_DSN || "YOUR_PLACEHOLDER_SENTRY_DSN",
-  integrations: [
-    // Standardintegrationen wie Http und Express werden automatisch hinzugefügt.
-    // Fügen Sie hier nur zusätzliche oder benutzerdefinierte Integrationen hinzu.
-    // Korrigierte Verwendung: Aufruf als Funktion, nicht mit 'new'
-    nodeProfilingIntegration(),
-  ],
-  // Performance Monitoring
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0, // 10% in Produktion, 100% sonst
-  // Set sampling rate for profiling - this is relative to tracesSampleRate
-  profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0, // 10% in Produktion, 100% sonst
+  // DSN should now be available from process.env if set in .env
+  // Using a syntactically valid but fake DSN as default
+  dsn: process.env.SENTRY_DSN || "https://7ea70caba68f548fb96482a573006a7b@o447623.ingest.us.sentry.io/4509062020333568",
+  // Remove explicit integrations for now, rely on defaults
+  // integrations: [], // Let Sentry add defaults like Http, Express automatically
+  // Performance Monitoring - Keep enabled
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  // Profiling disabled for now to simplify
+  // profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
   environment: process.env.NODE_ENV || 'development',
-  // Optional: Release-Version setzen (z.B. über GIT_COMMIT_SHA)
   release: process.env.GIT_COMMIT_SHA || undefined,
 });
 // --- Ende Sentry Initialisierung ---
 
 
+// Require other modules AFTER Sentry is initialized
 const express = require('express');
 const cors = require('cors');
 const geoip = require('@maxmind/geoip2-node');
@@ -34,29 +31,31 @@ const { spawn } = require('child_process');
 const dns = require('dns').promises;
 const pino = require('pino'); // Logging library
 const rateLimit = require('express-rate-limit'); // Rate limiting middleware
-const whois = require('whois-json'); // Hinzugefügt für WHOIS
+const whois = require('whois-json'); // Added for WHOIS
 // REMOVED: const oui = require('oui');
 
 // --- Logger Initialisierung ---
 const logger = pino({
-  level: process.env.LOG_LEVEL || 'info', // Konfigurierbares Log-Level (z.B. 'debug', 'info', 'warn', 'error')
-  // Pretty print nur im Development, sonst JSON für bessere Maschinenlesbarkeit
+  level: process.env.LOG_LEVEL || 'info', // Configurable log level (e.g., 'debug', 'info', 'warn', 'error')
+  // Pretty print only in Development, otherwise JSON for better machine readability
   transport: process.env.NODE_ENV !== 'production'
     ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:standard', ignore: 'pid,hostname' } }
     : undefined,
 });
 
+// Create Express app instance AFTER requiring express
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- Sentry Request Handler (ALS ERSTE MIDDLEWARE!) ---
-// Dieser Handler muss VOR allen anderen Middlewares und Routen stehen.
+// --- Sentry Request Handler (AS FIRST MIDDLEWARE!) ---
+// This handler must be the first middleware on the app.
+// It needs to be called AFTER Sentry.init()
 app.use(Sentry.Handlers.requestHandler());
 // --- Ende Sentry Request Handler ---
 
-// --- Sentry Tracing Handler (NACH CORS/JSON, VOR ROUTEN) ---
-// Dieser Handler muss NACH dem requestHandler und VOR den Routen stehen.
-// Er fügt Trace-Informationen zu eingehenden Anfragen hinzu.
+// --- Sentry Tracing Handler (AFTER requestHandler, BEFORE routes) ---
+// This handler must be after requestHandler and before any routes.
+// It adds tracing information to incoming requests.
 app.use(Sentry.Handlers.tracingHandler());
 // --- Ende Sentry Tracing Handler ---
 
