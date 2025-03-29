@@ -2,10 +2,6 @@ name: Build and Push Docker Images
 
 # Trigger: Wann soll der Workflow laufen?
 on:
-  push:
-    branches: [ main ] # Läuft bei jedem Push zum main-Branch
-  pull_request:
-    branches: [ main ] # Läuft bei Pull Requests gegen den main-Branch (nur Build, kein Push)
   workflow_dispatch: # Ermöglicht manuelles Starten über die GitHub UI
 
 jobs:
