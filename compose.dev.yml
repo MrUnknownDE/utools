@@ -44,7 +44,7 @@ services:
       # Zugriff von außen (Browser) erfolgt über localhost:8080
       - "8080:80"
     depends_on:
-      - backend # Stellt sicher, dass Backend gestartet wird (aber nicht unbedingt bereit ist)
+      - backend-dev # Stellt sicher, dass Backend gestartet wird (aber nicht unbedingt bereit ist)
     networks:
       - utools_network # Verbinde mit unserem benutzerdefinierten Netzwerk
 
