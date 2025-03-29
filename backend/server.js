@@ -522,6 +522,95 @@ app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir strea
 }); // Ende von app.get('/api/traceroute'...)
 
 
+// Lookup Endpunkt für beliebige IP
+app.get('/api/lookup', async (req, res) => {
+    // Debuggin-Logs
+    logger.debug({ queryParams: req.query }, 'Received query parameters for lookup');
+
+    const targetIpRaw = req.query.targetIp; // IP kommt jetzt als Query-Parameter 'ip'
+    const targetIp = typeof targetIpRaw === 'string' ? targetIpRaw.trim() : targetIpRaw;
+    const requestIp = req.ip || req.socket.remoteAddress; // Nur für Logging
+
+    logger.info({ requestIp, targetIp }, 'Lookup request received'); // <-- Hier sollte targetIp korrekt geloggt werden
+
+    // Validierung: Ist es eine gültige IP?
+    if (!isValidIp(targetIp)) { // <-- Hier wird targetIp verwendet, scheint OK
+        logger.warn({ requestIp, targetIp }, 'Invalid target IP for lookup');
+        return res.status(400).json({ error: 'Invalid IP address provided for lookup.' });
+    }
+
+    // Validierung: Ist es eine private IP?
+    if (isPrivateIp(targetIp)) { // <-- Hier wird targetIp verwendet, scheint OK
+        logger.warn({ requestIp, targetIp }, 'Attempt to lookup private IP blocked');
+        return res.status(403).json({ error: 'Lookup for private or local IP addresses is not supported.' });
+    }
+
+    // Führe die gleichen Lookups wie bei /api/ipinfo durch, aber für targetIp
+    try {
+        let geo = null;
+        try {
+            const geoData = cityReader.city(targetIp);
+            // --- KORREKTUR HIER: Datenextraktion wieder einfügen ---
+            geo = {
+                city: geoData.city?.names?.en,
+                region: geoData.subdivisions?.[0]?.isoCode,
+                country: geoData.country?.isoCode,
+                countryName: geoData.country?.names?.en,
+                postalCode: geoData.postal?.code,
+                latitude: geoData.location?.latitude,
+                longitude: geoData.location?.longitude,
+                timezone: geoData.location?.timeZone,
+            };
+            // --- ENDE KORREKTUR ---
+            // Filter out null/undefined values before logging/returning (optional but cleaner)
+            geo = Object.fromEntries(Object.entries(geo).filter(([_, v]) => v != null));
+            logger.debug({ targetIp, geo }, 'GeoIP lookup successful for lookup');
+        } catch (e) {
+            logger.warn({ targetIp, error: e.message }, `MaxMind City lookup failed for lookup`);
+            geo = { error: 'GeoIP lookup failed (IP not found in database or private range).' };
+         }
+
+        let asn = null;
+        try {
+            const asnData = asnReader.asn(targetIp);
+             // --- KORREKTUR HIER: Datenextraktion wieder einfügen ---
+            asn = {
+                number: asnData.autonomousSystemNumber,
+                organization: asnData.autonomousSystemOrganization,
+            };
+             // --- ENDE KORREKTUR ---
+             // Filter out null/undefined values
+             asn = Object.fromEntries(Object.entries(asn).filter(([_, v]) => v != null));
+             logger.debug({ targetIp, asn }, 'ASN lookup successful for lookup');
+        } catch (e) {
+            logger.warn({ targetIp, error: e.message }, `MaxMind ASN lookup failed for lookup`);
+            asn = { error: 'ASN lookup failed (IP not found in database or private range).' };
+        }
+
+        let rdns = null;
+        try {
+            const hostnames = await dns.reverse(targetIp);
+            rdns = hostnames;
+            logger.debug({ targetIp, rdns }, 'rDNS lookup successful for lookup');
+        } catch (e) {
+            // ... (rDNS Fehlerbehandlung bleibt gleich) ...
+            rdns = { error: `rDNS lookup failed (${e.code || 'Unknown error'})` };
+         }
+
+        // Gib die gesammelten Daten zurück
+        res.json({
+            ip: targetIp,
+            geo: Object.keys(geo).length > 0 ? geo : null, // Sende null wenn geo leer ist (außer bei Fehler)
+            asn: Object.keys(asn).length > 0 ? asn : null, // Sende null wenn asn leer ist (außer bei Fehler)
+            rdns,
+        });
+
+    } catch (error) {
+        logger.error({ targetIp, error: error.message, stack: error.stack }, 'Error processing lookup');
+        res.status(500).json({ error: 'Internal server error while processing lookup.' });
+    }
+});
+
 // --- Server starten ---
 initialize().then(() => {
     app.listen(PORT, () => {
@@ -530,6 +619,7 @@ initialize().then(() => {
         logger.info(`  http://localhost:${PORT}/api/ipinfo`);
         logger.info(`  http://localhost:${PORT}/api/ping?targetIp=<ip>`);
         logger.info(`  http://localhost:${PORT}/api/traceroute?targetIp=<ip>`);
+        logger.info(`  http://localhost:${PORT}/api/lookup?targetIp=<ip>`);
     });
 }).catch(error => {
     // Fehler bei der Initialisierung wurde bereits geloggt.
