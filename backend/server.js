@@ -9,7 +9,7 @@ const dns = require('dns').promises;
 const pino = require('pino'); // Logging library
 const rateLimit = require('express-rate-limit'); // Rate limiting middleware
 const whois = require('whois-json'); // Hinzugefügt für WHOIS
-const macLookup = require('mac-lookup'); // Hinzugefügt für MAC Lookup
+const oui = require('oui'); // Ersetzt mac-lookup
 
 // --- Logger Initialisierung ---
 const logger = pino({
@@ -99,6 +99,7 @@ function isValidMac(mac) {
         return false;
     }
     // Erlaubt Formate wie 00:1A:2B:3C:4D:5E, 00-1A-2B-3C-4D-5E, 001A.2B3C.4D5E
+    // oui() validiert intern, aber eine Vorabprüfung schadet nicht.
     const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{4}\.){2}([0-9A-Fa-f]{4})$/;
     return macRegex.test(mac.trim());
 }
@@ -278,13 +279,12 @@ async function initialize() {
         asnReader = await geoip.Reader.open(asnDbPath);
         logger.info('MaxMind databases loaded successfully.');
 
-        // Lade MAC-Lookup Daten (asynchron)
-        logger.info('Loading MAC address lookup data...');
-        await macLookup.load(); // Lädt die Daten beim Start
-        logger.info('MAC address lookup data loaded.');
+        // Kein explizites Laden mehr für 'oui' nötig.
+        // Die Daten werden bei der ersten Verwendung automatisch geladen/aktualisiert.
+        logger.info('MAC address lookup data (oui) will be loaded on first use.');
 
     } catch (error) {
-        logger.fatal({ error: error.message, stack: error.stack }, 'Could not initialize databases or MAC data. Exiting.');
+        logger.fatal({ error: error.message, stack: error.stack }, 'Could not initialize MaxMind databases. Exiting.');
         process.exit(1);
     }
 }
@@ -314,9 +314,9 @@ const generalLimiter = rateLimit({
 app.use('/api/ping', generalLimiter);
 app.use('/api/traceroute', generalLimiter);
 app.use('/api/lookup', generalLimiter);
-app.use('/api/dns-lookup', generalLimiter); // Neu
-app.use('/api/whois-lookup', generalLimiter); // Neu
-app.use('/api/mac-lookup', generalLimiter); // Neu
+app.use('/api/dns-lookup', generalLimiter);
+app.use('/api/whois-lookup', generalLimiter);
+app.use('/api/mac-lookup', generalLimiter);
 
 
 // --- Routen ---
@@ -668,13 +668,13 @@ app.get('/api/dns-lookup', async (req, res) => {
 
     if (!isValidDomain(domain)) {
         logger.warn({ requestIp, domain }, 'Invalid domain for DNS lookup');
-        return res.status(400).json({ error: 'Invalid domain name provided.' });
+        return res.status(400).json({ success: false, error: 'Invalid domain name provided.' });
     }
 
     const validTypes = ['A', 'AAAA', 'MX', 'TXT', 'NS', 'CNAME', 'SOA', 'SRV', 'PTR', 'ANY'];
     if (!validTypes.includes(type)) {
         logger.warn({ requestIp, domain, type }, 'Invalid record type for DNS lookup');
-        return res.status(400).json({ error: `Invalid record type provided. Valid types are: ${validTypes.join(', ')}` });
+        return res.status(400).json({ success: false, error: `Invalid record type provided. Valid types are: ${validTypes.join(', ')}` });
     }
 
     try {
@@ -729,7 +729,7 @@ app.get('/api/whois-lookup', async (req, res) => {
     // Einfache Validierung: Muss entweder eine gültige IP oder eine Domain sein
     if (!isValidIp(query) && !isValidDomain(query)) {
         logger.warn({ requestIp, query }, 'Invalid query for WHOIS lookup');
-        return res.status(400).json({ error: 'Invalid domain name or IP address provided for WHOIS lookup.' });
+        return res.status(400).json({ success: false, error: 'Invalid domain name or IP address provided for WHOIS lookup.' });
     }
 
     try {
@@ -752,22 +752,22 @@ app.get('/api/whois-lookup', async (req, res) => {
     }
 });
 
-// MAC Address Lookup Endpunkt
-app.get('/api/mac-lookup', async (req, res) => {
+// MAC Address Lookup Endpunkt (mit 'oui' Bibliothek)
+app.get('/api/mac-lookup', async (req, res) => { // async ist hier nicht unbedingt nötig, aber schadet nicht
     const macRaw = req.query.mac;
     const mac = typeof macRaw === 'string' ? macRaw.trim() : macRaw;
     const requestIp = req.ip || req.socket.remoteAddress;
 
     logger.info({ requestIp, mac }, 'MAC lookup request received');
 
-    if (!isValidMac(mac)) {
-        logger.warn({ requestIp, mac }, 'Invalid MAC address for lookup');
-        return res.status(400).json({ error: 'Invalid MAC address format provided.' });
+    if (!isValidMac(mac)) { // Vorabprüfung beibehalten
+        logger.warn({ requestIp, mac }, 'Invalid MAC address format for lookup');
+        return res.status(400).json({ success: false, error: 'Invalid MAC address format provided.' });
     }
 
     try {
-        // mac-lookup verwendet eine lokale Datenbank, sollte schnell sein
-        const vendor = await macLookup.lookup(mac); // lookup ist jetzt async
+        // oui() lädt die DB bei Bedarf und gibt den Vendor-String oder null zurück
+        const vendor = oui(mac); // Einfacher Aufruf
 
         if (vendor) {
             logger.info({ requestIp, mac, vendor }, 'MAC lookup successful');
@@ -778,7 +778,8 @@ app.get('/api/mac-lookup', async (req, res) => {
         }
 
     } catch (error) {
-        // Fehler sollten nur auftreten, wenn die DB nicht geladen wurde oder die Eingabe ungültig ist (sollte durch isValidMac abgefangen werden)
+        // Fehler können auftreten, wenn die interne DB nicht geladen werden kann
+        // oder die Eingabe trotz Regex ungültig ist (sollte selten sein)
         logger.error({ requestIp, mac, error: error.message }, 'MAC lookup failed');
         res.status(500).json({ success: false, error: `MAC lookup failed: ${error.message}` });
     }
@@ -802,9 +803,9 @@ initialize().then(() => {
         logger.info(`  http://localhost:${PORT}/api/ping?targetIp=<ip>`);
         logger.info(`  http://localhost:${PORT}/api/traceroute?targetIp=<ip>`);
         logger.info(`  http://localhost:${PORT}/api/lookup?targetIp=<ip>`);
-        logger.info(`  http://localhost:${PORT}/api/dns-lookup?domain=<domain>&type=<type>`); // Neu
-        logger.info(`  http://localhost:${PORT}/api/whois-lookup?query=<domain_or_ip>`); // Neu
-        logger.info(`  http://localhost:${PORT}/api/mac-lookup?mac=<mac_address>`); // Neu
+        logger.info(`  http://localhost:${PORT}/api/dns-lookup?domain=<domain>&type=<type>`);
+        logger.info(`  http://localhost:${PORT}/api/whois-lookup?query=<domain_or_ip>`);
+        logger.info(`  http://localhost:${PORT}/api/mac-lookup?mac=<mac_address>`);
         logger.info(`  http://localhost:${PORT}/api/version`);
     });
 }).catch(error => {
