@@ -20,7 +20,7 @@ services:
       - 8.8.8.8    # Google DNS
       - 8.8.4.4    # Google DNS
     networks:
-      - ip_tool_network # Verbinde mit unserem benutzerdefinierten Netzwerk
+      - utools_network # Verbinde mit unserem benutzerdefinierten Netzwerk
 
   # Frontend Service (Nginx)
   frontend:
@@ -34,9 +34,9 @@ services:
     depends_on:
       - backend # Stellt sicher, dass Backend gestartet wird (aber nicht unbedingt bereit ist)
     networks:
-      - ip_tool_network # Verbinde mit unserem benutzerdefinierten Netzwerk
+      - utools_network # Verbinde mit unserem benutzerdefinierten Netzwerk
 
 # Definiere ein benutzerdefiniertes Netzwerk (gute Praxis)
 networks:
-  ip_tool_network:
+  utools_network:
     driver: bridge # Standard-Netzwerktreiber
