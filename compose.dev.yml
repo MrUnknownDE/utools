@@ -10,7 +10,7 @@ services:
         - GIT_COMMIT_SHA=${GIT_COMMIT_SHA:-unknown}
         # Übergibt den Sentry DSN als Build-Argument (optional, falls im Code benötigt)
         - SENTRY_DSN="https://7ea70caba68f548fb96482a573006a7b@o447623.ingest.us.sentry.io/4509062020333568"
-    container_name: utools_backend # Eindeutiger Name für den Container
+    container_name: utools_backend_dev # Eindeutiger Name für den Container
     restart: unless-stopped
     environment:
       # Setze Umgebungsvariablen für das Backend
@@ -37,7 +37,7 @@ services:
     build:
       context: ./frontend # Pfad zum Verzeichnis mit dem Frontend-Dockerfile
       dockerfile: Dockerfile.dev
-    container_name: utools_frontend
+    container_name: utools_frontend_dev
     restart: unless-stopped
     ports:
       # Mappe Port 8080 vom Host auf Port 80 im Container (wo Nginx lauscht)
