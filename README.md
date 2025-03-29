@@ -13,8 +13,6 @@ services:
       PORT: 3000
       LOG_LEVEL: info 
       PING_COUNT: 4
-    ports:
-      - "3000:3000"
     dns:
       - 1.1.1.1    # Cloudflare DNS
       - 1.0.0.1    # Cloudflare DNS
@@ -37,5 +35,4 @@ services:
 networks:
   utools_network:
     driver: bridge
-    
-    ```
+```
