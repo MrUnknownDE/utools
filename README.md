@@ -1,11 +1,16 @@
 # ✨ utools - IP Information & Diagnostics Webapp ✨
 
 [![Build Status](https://github.com/mrunknownde/utools/actions/workflows/docker-build-push.yml/badge.svg)](https://github.com/mrunknownde/utools/actions/workflows/docker-build-push.yml)
+[![Update MaxMind GeoLite2 DBs](https://github.com/MrUnknownDE/utools/actions/workflows/maxmind-update.yml/badge.svg)](https://github.com/MrUnknownDE/utools/actions/workflows/maxmind-update.yml)
+
+
 
 A modern web application that displays detailed information about a client's IP address, including geolocation, ASN, rDNS, and provides network diagnostic tools like Ping and Traceroute. It also allows looking up information for any public IP address.
 
 <!-- Optional: Füge hier einen Screenshot hinzu -->
 <!-- ![Screenshot](link/to/your/screenshot.png) -->
+
+### Livedemo: https://ip.johanneskr.de
 
 ## 🚀 Features
 
