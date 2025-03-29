@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IP Subnetz Rechner - Netzwerk Tools</title>
+    <!-- Tailwind CSS Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Eigene Styles (für Navigation etc., wie in index.html) -->
+    <style>
+        /* Navigations-Styling */
+        nav ul { list-style: none; padding: 0; margin: 0; display: flex; gap: 1rem; }
+        nav a { color: #c4b5fd; /* purple-300 */ text-decoration: none; }
+        nav a:hover { color: #a78bfa; /* purple-400 */ text-decoration: underline; }
+        header { background-color: #374151; /* gray-700 */ padding: 1rem; margin-bottom: 1.5rem; border-radius: 0.5rem; /* rounded-lg */ display: flex; justify-content: space-between; align-items: center; }
+        header h1 { font-size: 1.5rem; /* text-2xl */ font-weight: bold; color: #e5e7eb; /* gray-200 */ }
+
+        /* Styling für Formular und Ergebnisse */
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #d1d5db; /* gray-300 */ }
+        input[type="text"] {
+            width: 100%;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            background-color: #4b5563; /* gray-600 */
+            border: 1px solid #6b7280; /* gray-500 */
+            border-radius: 0.375rem; /* rounded-md */
+            color: #e5e7eb; /* gray-200 */
+            font-family: monospace;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #a78bfa; /* purple-400 */
+            box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.5);
+        }
+        button[type="submit"] {
+            background-color: #8b5cf6; /* purple-500 */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.375rem; /* rounded-md */
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button[type="submit"]:hover {
+            background-color: #7c3aed; /* purple-600 */
+        }
+        #results {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background-color: #374151; /* gray-700 */
+            border-radius: 0.5rem; /* rounded-lg */
+        }
+        #results h3 {
+            font-size: 1.25rem; /* text-xl */
+            font-weight: 600;
+            color: #c4b5fd; /* purple-300 */
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #6b7280; /* gray-500 */
+            padding-bottom: 0.5rem;
+        }
+        #results p {
+            margin-bottom: 0.75rem;
+            color: #d1d5db; /* gray-300 */
+        }
+        #results p strong {
+            color: #e5e7eb; /* gray-200 */
+            min-width: 150px; /* Für bessere Ausrichtung */
+            display: inline-block;
+        }
+         #results span {
+            font-family: monospace;
+            color: #a78bfa; /* purple-400 */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 font-sans p-4 md:p-8">
+
+    <header>
+        <h1>uTools</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">IP Info</a></li>
+                <li><a href="subnet-calculator.html">Subnetz Rechner</a></li>
+                <!-- Weitere Menüpunkte hier hinzufügen -->
+            </ul>
+        </nav>
+    </header>
+
+    <div class="container mx-auto max-w-4xl bg-gray-800 rounded-lg shadow-xl p-6">
+
+        <h2 class="text-2xl font-bold mb-6 text-purple-400 text-center">IP Subnetz Rechner</h2>
+
+        <form id="subnet-form" class="mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label for="ip-address">IP Adresse:</label>
+                    <input type="text" id="ip-address" name="ip-address" placeholder="z.B. 192.168.1.1" required
+                           class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono">
+                </div>
+                <div>
+                    <label for="cidr">CIDR / Subnetzmaske:</label>
+                    <input type="text" id="cidr" name="cidr" placeholder="z.B. 24 oder 255.255.255.0" required
+                           class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono">
+                </div>
+            </div>
+
+            <button type="submit"
+                    class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out">
+                Berechnen
+            </button>
+        </form>
+
+        <div id="results" class="bg-gray-700 rounded p-6">
+            <h3 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-2 mb-4">Ergebnisse:</h3>
+            <div class="space-y-2 text-sm">
+                <p><strong>Netzwerkadresse:</strong> <span id="network-address" class="font-mono text-purple-400">-</span></p>
+                <p><strong>Broadcast-Adresse:</strong> <span id="broadcast-address" class="font-mono text-purple-400">-</span></p>
+                <p><strong>Subnetzmaske:</strong> <span id="subnet-mask" class="font-mono text-purple-400">-</span></p>
+                <p><strong>Anzahl der Hosts:</strong> <span id="host-count" class="font-mono text-purple-400">-</span></p>
+                <p><strong>Erste Host-Adresse:</strong> <span id="first-host" class="font-mono text-purple-400">-</span></p>
+                <p><strong>Letzte Host-Adresse:</strong> <span id="last-host" class="font-mono text-purple-400">-</span></p>
+            </div>
+        </div>
+
+    </div>
+
+    <footer class="mt-8 pt-4 border-t border-gray-600 text-center text-xs text-gray-500">
+        <p>&copy; 2025 <a href="https://johanneskr.de">Johannes Krüger</a></p>
+    </footer>
+
+    <!-- Nur das Skript für den Rechner laden -->
+    <script src="subnet-calculator.js"></script>
+</body>
+</html>

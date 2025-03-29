@@ -60,9 +60,27 @@
         #traceroute-output .error-line { color: #f87171; font-weight: bold;} /* Rot */
         #traceroute-output .end-line { color: #a78bfa; font-weight: bold; margin-top: 10px;} /* Lila */
 
+        /* Navigations-Styling */
+        nav ul { list-style: none; padding: 0; margin: 0; display: flex; gap: 1rem; }
+        nav a { color: #c4b5fd; /* purple-300 */ text-decoration: none; }
+        nav a:hover { color: #a78bfa; /* purple-400 */ text-decoration: underline; }
+        header { background-color: #374151; /* gray-700 */ padding: 1rem; margin-bottom: 1.5rem; border-radius: 0.5rem; /* rounded-lg */ display: flex; justify-content: space-between; align-items: center; }
+        header h1 { font-size: 1.5rem; /* text-2xl */ font-weight: bold; color: #e5e7eb; /* gray-200 */ }
+
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 font-sans p-4 md:p-8">
+
+    <header>
+        <h1>uTools</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">IP Info</a></li>
+                <li><a href="subnet-calculator.html">Subnetz Rechner</a></li>
+                <!-- Weitere Menüpunkte hier hinzufügen -->
+            </ul>
+        </nav>
+    </header>
 
     <div class="container mx-auto max-w-4xl bg-gray-800 rounded-lg shadow-xl p-6">
 
@@ -209,6 +227,7 @@
 
         <!-- Footer für Version -->
         <footer class="mt-8 pt-4 border-t border-gray-600 text-center text-xs text-gray-500">
+            <p>&copy; 2025 <a href="https://johanneskr.de">Johannes Krüger</a></p>
             <p>Version: <span id="commit-sha" class="font-mono">loading...</span></p>
         </footer>
 
@@ -221,5 +240,6 @@
             crossorigin=""></script>
     <!-- Eigene JS-Logik -->
     <script src="script.js"></script>
+    <!-- Kein subnet-calculator.js hier, da es nur auf der Subnetz-Seite benötigt wird -->
 </body>
 </html>
