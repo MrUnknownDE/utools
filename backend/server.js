@@ -6,13 +6,11 @@ const Sentry = require("@sentry/node");
 const { ProfilingIntegration } = require("@sentry/profiling-node");
 
 Sentry.init({
-  // Ersetzen Sie dies durch Ihren echten Sentry DSN
+  // Ersetzen Sie dies durch Ihren echten Sentry DSN oder verwenden Sie die .env Datei
   dsn: process.env.SENTRY_DSN || "YOUR_PLACEHOLDER_SENTRY_DSN",
   integrations: [
-    // enable HTTP calls tracing
-    new Sentry.Integrations.Http({ tracing: true }),
-    // enable Express.js middleware tracing
-    new Sentry.Integrations.Express({ app: require('express')() }), // Temporäre App für Integration
+    // Standardintegrationen wie Http und Express werden automatisch hinzugefügt.
+    // Fügen Sie hier nur zusätzliche oder benutzerdefinierte Integrationen hinzu.
     new ProfilingIntegration(),
   ],
   // Performance Monitoring
@@ -50,10 +48,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // --- Sentry Request Handler (ALS ERSTE MIDDLEWARE!) ---
+// Dieser Handler muss VOR allen anderen Middlewares und Routen stehen.
 app.use(Sentry.Handlers.requestHandler());
 // --- Ende Sentry Request Handler ---
 
 // --- Sentry Tracing Handler (NACH CORS/JSON, VOR ROUTEN) ---
+// Dieser Handler muss NACH dem requestHandler und VOR den Routen stehen.
+// Er fügt Trace-Informationen zu eingehenden Anfragen hinzu.
 app.use(Sentry.Handlers.tracingHandler());
 // --- Ende Sentry Tracing Handler ---
 
@@ -820,7 +821,8 @@ app.use((err, req, res, next) => {
     // oder wenn Sie `next(err)` im Sentry-Handler aufrufen.
     logger.error({ error: err.message, stack: err.stack, url: req.originalUrl }, 'Unhandled error caught by fallback handler');
     res.statusCode = err.status || 500;
-    res.end(res.sentry + "\n" + (err.message || 'Internal Server Error') + "\n"); // res.sentry wird vom Sentry Handler gesetzt
+    // res.sentry wird vom Sentry errorHandler gesetzt und enthält die Sentry Event ID
+    res.end((res.sentry ? `Event ID: ${res.sentry}\n` : '') + (err.message || 'Internal Server Error') + "\n");
 });
 
 
@@ -852,26 +854,28 @@ const signals = { 'SIGINT': 2, 'SIGTERM': 15 };
 async function gracefulShutdown(signal) {
     logger.info(`Received ${signal}, shutting down gracefully...`);
     if (server) {
-        server.close(() => {
+        server.close(async () => { // async hinzugefügt
             logger.info('HTTP server closed.');
             // Sentry schließen, um sicherzustellen, dass alle Events gesendet werden
-            Sentry.close(2000).then(() => { // Timeout von 2 Sekunden
+            try {
+                await Sentry.close(2000); // Timeout von 2 Sekunden, await verwenden
                 logger.info('Sentry closed.');
-                process.exit(128 + signals[signal]);
-            }).catch(e => {
+            } catch (e) {
                  logger.error({ error: e.message }, 'Error closing Sentry');
-                 process.exit(1); // Trotzdem beenden
-            });
+            } finally {
+                 process.exit(128 + signals[signal]);
+            }
         });
     } else {
         // Wenn der Server nie gestartet ist, Sentry trotzdem schließen
-        Sentry.close(2000).then(() => {
+        try {
+            await Sentry.close(2000); // await verwenden
             logger.info('Sentry closed (server never started).');
-            process.exit(128 + signals[signal]);
-        }).catch(e => {
+        } catch (e) {
              logger.error({ error: e.message }, 'Error closing Sentry (server never started)');
-             process.exit(1);
-        });
+        } finally {
+             process.exit(128 + signals[signal]);
+        }
     }
 
     // Fallback-Timeout, falls das Schließen hängt
