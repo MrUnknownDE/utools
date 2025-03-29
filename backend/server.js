@@ -9,7 +9,7 @@ const dns = require('dns').promises;
 const pino = require('pino'); // Logging library
 const rateLimit = require('express-rate-limit'); // Rate limiting middleware
 const whois = require('whois-json'); // Hinzugefügt für WHOIS
-const oui = require('oui'); // Ersetzt macaddress für OUI Lookup
+// REMOVED: const oui = require('oui');
 
 // --- Logger Initialisierung ---
 const logger = pino({
@@ -86,21 +86,7 @@ function isValidDomain(domain) {
     return domainRegex.test(domain.trim());
 }
 
-/**
- * Validiert eine MAC-Adresse.
- * @param {string} mac - Die zu validierende MAC-Adresse.
- * @returns {boolean} True, wenn gültig, sonst false.
- */
-function isValidMac(mac) {
-    if (!mac || typeof mac !== 'string') {
-        return false;
-    }
-    // Erlaubt Formate wie 00:1A:2B:3C:4D:5E, 00-1A-2B-3C-4D-5E, 001A.2B3C.4D5E, 001a2b3c4d5e
-    // Die oui Bibliothek ist tolerant gegenüber verschiedenen Formaten.
-    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{4}\.){2}([0-9A-Fa-f]{4})$|^([0-9A-Fa-f]{12})$/;
-    return macRegex.test(mac.trim());
-}
-
+// REMOVED: isValidMac function
 
 /**
  * Bereinigt eine IP-Adresse (z.B. entfernt ::ffff: Präfix von IPv4-mapped IPv6).
@@ -259,7 +245,7 @@ function parseTracerouteLine(line) {
 }
 
 
-// --- Initialisierung (MaxMind DBs laden & OUI DB laden) ---
+// --- Initialisierung (MaxMind DBs laden) ---
 async function initialize() {
     try {
         logger.info('Loading MaxMind databases...');
@@ -270,10 +256,7 @@ async function initialize() {
         asnReader = await geoip.Reader.open(asnDbPath);
         logger.info('MaxMind databases loaded successfully.');
 
-        // OUI Datenbank laden (kann beim ersten Aufruf etwas dauern)
-        logger.info('Loading OUI database...');
-        await oui.update(); // Sicherstellen, dass die DB aktuell ist (optional, aber empfohlen)
-        logger.info('OUI database loaded/updated.');
+        // REMOVED: OUI database loading
 
     } catch (error) {
         logger.fatal({ error: error.message, stack: error.stack }, 'Could not initialize databases. Exiting.');
@@ -306,7 +289,7 @@ app.use('/api/traceroute', generalLimiter);
 app.use('/api/lookup', generalLimiter);
 app.use('/api/dns-lookup', generalLimiter);
 app.use('/api/whois-lookup', generalLimiter);
-app.use('/api/mac-lookup', generalLimiter);
+// REMOVED: app.use('/api/mac-lookup', generalLimiter);
 
 
 // --- Routen ---
@@ -687,39 +670,7 @@ app.get('/api/whois-lookup', async (req, res) => {
     }
 });
 
-// MAC Address Lookup Endpunkt (mit 'oui' Bibliothek)
-app.get('/api/mac-lookup', async (req, res) => {
-    const macRaw = req.query.mac;
-    const mac = typeof macRaw === 'string' ? macRaw.trim() : macRaw;
-    const requestIp = req.ip || req.socket.remoteAddress;
-
-    logger.info({ requestIp, mac }, 'MAC lookup request received');
-
-    if (!isValidMac(mac)) {
-        logger.warn({ requestIp, mac }, 'Invalid MAC address format for lookup');
-        return res.status(400).json({ success: false, error: 'Invalid MAC address format provided.' });
-    }
-
-    try {
-        // Verwende die oui Bibliothek für den Lookup. Sie sollte verschiedene Formate verarbeiten können.
-        // oui() gibt den Vendor-String oder null zurück. Es kann beim ersten Mal die DB laden.
-        const vendor = await oui(mac); // Verwende await, falls oui.update() im Hintergrund läuft
-
-        if (vendor) {
-            logger.info({ requestIp, mac, vendor }, 'MAC lookup successful');
-            res.json({ success: true, mac: mac, vendor: vendor });
-        } else {
-            logger.info({ requestIp, mac }, 'MAC lookup successful, but no vendor found');
-            res.json({ success: true, mac: mac, vendor: null, message: 'Vendor not found for this MAC address prefix.' });
-        }
-
-    } catch (error) {
-        // Fehler können auftreten, wenn die interne DB nicht geladen werden kann oder andere Probleme auftreten
-        logger.error({ requestIp, mac, error: error.message }, 'MAC lookup failed');
-        res.status(500).json({ success: false, error: `MAC lookup failed: ${error.message}` });
-    }
-});
-
+// REMOVED: MAC Address Lookup Endpunkt
 
 // Version Endpunkt
 app.get('/api/version', (req, res) => {
@@ -740,7 +691,7 @@ initialize().then(() => {
         logger.info(`  http://localhost:${PORT}/api/lookup?targetIp=<ip>`);
         logger.info(`  http://localhost:${PORT}/api/dns-lookup?domain=<domain>&type=<type>`);
         logger.info(`  http://localhost:${PORT}/api/whois-lookup?query=<domain_or_ip>`);
-        logger.info(`  http://localhost:${PORT}/api/mac-lookup?mac=<mac_address>`);
+        // REMOVED: MAC lookup log message
         logger.info(`  http://localhost:${PORT}/api/version`);
     });
 }).catch(error => {
