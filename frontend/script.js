@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const tracerouteMessage = document.getElementById('traceroute-message');
 
     // --- Configuration ---
-    const API_BASE_URL = 'http://localhost:3000/api'; // Anpassen, falls nötig
+    const API_BASE_URL = '/api'; // Anpassen, falls nötig
 
     // --- State ---
     let map = null; // Leaflet map instance for user's IP

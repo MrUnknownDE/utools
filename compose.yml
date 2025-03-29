@@ -1,0 +1,45 @@
+services:
+  # Backend Service (Node.js App)
+  backend:
+    build: ./backend # Pfad zum Verzeichnis mit dem Backend-Dockerfile
+    container_name: utools_backend # Eindeutiger Name für den Container
+    restart: unless-stopped
+    environment:
+      # Setze Umgebungsvariablen für das Backend
+      NODE_ENV: production # Wichtig für Performance und Logging
+      PORT: 3000 # Port innerhalb des Containers
+      LOG_LEVEL: info # Oder 'warn' für weniger Logs in Produktion
+      PING_COUNT: 4
+      # Die DB-Pfade werden aus dem Backend-Dockerfile ENV genommen,
+      # könnten hier aber überschrieben werden, falls nötig.
+      # GEOIP_CITY_DB: ./data/GeoLite2-City.mmdb
+      # GEOIP_ASN_DB: ./data/GeoLite2-ASN.mmdb
+    ports:
+      # Mappe Port 3000 vom Host auf Port 3000 im Container
+      # Zugriff von außen (Browser) erfolgt über localhost:3000
+      - "3000:3000"
+    volumes:
+      # Optional: Mount für die MaxMind Daten, um sie zu aktualisieren ohne Image-Neubau
+      # - ./backend/data:/app/data:ro # :ro = read-only im Container
+      # Kein Code-Mount für Produktion, da der Code im Image sein sollte.
+    networks:
+      - ip_tool_network # Verbinde mit unserem benutzerdefinierten Netzwerk
+
+  # Frontend Service (Nginx)
+  frontend:
+    build: ./frontend # Pfad zum Verzeichnis mit dem Frontend-Dockerfile
+    container_name: utools_frontend
+    restart: unless-stopped
+    ports:
+      # Mappe Port 8080 vom Host auf Port 80 im Container (wo Nginx lauscht)
+      # Zugriff von außen (Browser) erfolgt über localhost:8080
+      - "8080:80"
+    depends_on:
+      - backend # Stellt sicher, dass Backend gestartet wird (aber nicht unbedingt bereit ist)
+    networks:
+      - ip_tool_network # Verbinde mit unserem benutzerdefinierten Netzwerk
+
+# Definiere ein benutzerdefiniertes Netzwerk (gute Praxis)
+networks:
+  ip_tool_network:
+    driver: bridge # Standard-Netzwerktreiber
