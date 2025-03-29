@@ -3,7 +3,8 @@ require('dotenv').config(); // Lädt Variablen aus .env in process.env
 
 // --- Sentry Initialisierung (GANZ OBEN!) ---
 const Sentry = require("@sentry/node");
-const { ProfilingIntegration } = require("@sentry/profiling-node");
+// Korrigierter Import für ProfilingIntegration
+const { nodeProfilingIntegration } = require("@sentry/profiling-node");
 
 Sentry.init({
   // Ersetzen Sie dies durch Ihren echten Sentry DSN oder verwenden Sie die .env Datei
@@ -11,7 +12,8 @@ Sentry.init({
   integrations: [
     // Standardintegrationen wie Http und Express werden automatisch hinzugefügt.
     // Fügen Sie hier nur zusätzliche oder benutzerdefinierte Integrationen hinzu.
-    new ProfilingIntegration(),
+    // Korrigierte Verwendung: Aufruf als Funktion, nicht mit 'new'
+    nodeProfilingIntegration(),
   ],
   // Performance Monitoring
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0, // 10% in Produktion, 100% sonst
