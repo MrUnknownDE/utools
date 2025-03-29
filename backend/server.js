@@ -9,7 +9,7 @@ const dns = require('dns').promises;
 const pino = require('pino'); // Logging library
 const rateLimit = require('express-rate-limit'); // Rate limiting middleware
 const whois = require('whois-json'); // Hinzugefügt für WHOIS
-const oui = require('oui'); // Ersetzt mac-lookup
+const macaddress = require('macaddress'); // Ersetzt oui
 
 // --- Logger Initialisierung ---
 const logger = pino({
@@ -40,7 +40,6 @@ function isValidIp(ip) {
     }
     const trimmedIp = ip.trim();
     const ipVersion = net.isIP(trimmedIp); // Gibt 0, 4 oder 6 zurück
-    // logger.debug({ ip: trimmedIp, version: ipVersion }, 'isValidIp check'); // Optional: Debug log
     return ipVersion === 4 || ipVersion === 6;
 }
 
@@ -83,8 +82,6 @@ function isValidDomain(domain) {
     if (!domain || typeof domain !== 'string' || domain.trim().length < 3) {
         return false;
     }
-    // Einfache Regex: Muss mindestens einen Punkt enthalten und keine ungültigen Zeichen.
-    // Erlaubt IDNs (Internationalized Domain Names) durch \p{L}
     const domainRegex = /^(?:[a-z0-9\p{L}](?:[a-z0-9\p{L}-]{0,61}[a-z0-9\p{L}])?\.)+[a-z0-9\p{L}][a-z0-9\p{L}-]{0,61}[a-z0-9\p{L}]$/iu;
     return domainRegex.test(domain.trim());
 }
@@ -99,7 +96,6 @@ function isValidMac(mac) {
         return false;
     }
     // Erlaubt Formate wie 00:1A:2B:3C:4D:5E, 00-1A-2B-3C-4D-5E, 001A.2B3C.4D5E
-    // oui() validiert intern, aber eine Vorabprüfung schadet nicht.
     const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{4}\.){2}([0-9A-Fa-f]{4})$/;
     return macRegex.test(mac.trim());
 }
@@ -107,7 +103,6 @@ function isValidMac(mac) {
 
 /**
  * Bereinigt eine IP-Adresse (z.B. entfernt ::ffff: Präfix von IPv4-mapped IPv6).
- * Verwendet net.isIP zur Validierung.
  * @param {string} ip - Die IP-Adresse.
  * @returns {string} Die bereinigte IP-Adresse.
  */
@@ -184,7 +179,7 @@ function parsePingOutput(pingOutput) {
         const statsLine = lines.find(line => line.includes('packets transmitted'));
         if (statsLine) {
             const transmittedMatch = statsLine.match(/(\d+)\s+packets transmitted/);
-            const receivedMatch = statsLine.match(/(\d+)\s+(?:received|packets received)/); // Anpassung für Varianten
+            const receivedMatch = statsLine.match(/(\d+)\s+(?:received|packets received)/);
             const lossMatch = statsLine.match(/([\d.]+)%\s+packet loss/);
             if (transmittedMatch) packetsTransmitted = parseInt(transmittedMatch[1], 10);
             if (receivedMatch) packetsReceived = parseInt(receivedMatch[1], 10);
@@ -209,7 +204,7 @@ function parsePingOutput(pingOutput) {
             rtt: rtt.avg !== null ? rtt : null,
         };
         if (packetsTransmitted > 0 && rtt.avg === null && packetsReceived === 0) {
-             result.error = "Request timed out or host unreachable."; // Spezifischer Fehler bei Totalausfall
+             result.error = "Request timed out or host unreachable.";
         }
 
     } catch (parseError) {
@@ -226,9 +221,8 @@ function parsePingOutput(pingOutput) {
  */
 function parseTracerouteLine(line) {
     line = line.trim();
-    if (!line || line.startsWith('traceroute to')) return null; // Ignoriere Header
+    if (!line || line.startsWith('traceroute to')) return null;
 
-    // Regex angepasst für mehr Robustheit (optionaler Hostname, IP immer da, RTTs oder *)
     const hopMatch = line.match(/^(\s*\d+)\s+(?:([a-zA-Z0-9\.\-]+)\s+\(([\d\.:a-fA-F]+)\)|([\d\.:a-fA-F]+))\s+(.*)$/);
     const timeoutMatch = line.match(/^(\s*\d+)\s+(\*\s+\*\s+\*)/);
 
@@ -242,29 +236,25 @@ function parseTracerouteLine(line) {
         };
     } else if (hopMatch) {
         const hop = parseInt(hopMatch[1].trim(), 10);
-        const hostname = hopMatch[2]; // Kann undefined sein
-        const ipInParen = hopMatch[3]; // Kann undefined sein
-        const ipDirect = hopMatch[4]; // Kann undefined sein
+        const hostname = hopMatch[2];
+        const ipInParen = hopMatch[3];
+        const ipDirect = hopMatch[4];
         const restOfLine = hopMatch[5].trim();
-
         const ip = ipInParen || ipDirect;
 
-        // Extrahiere RTTs (können * sein oder Zahl mit " ms")
         const rttParts = restOfLine.split(/\s+/);
         const rtts = rttParts.map(p => p === '*' ? '*' : p.replace(/\s*ms$/, '')).filter(p => p === '*' || !isNaN(parseFloat(p))).slice(0, 3);
-        // Fülle fehlende RTTs mit '*' auf, falls weniger als 3 gefunden wurden
         while (rtts.length < 3) rtts.push('*');
 
          return {
             hop: hop,
-            hostname: hostname || null, // Setze null, wenn kein Hostname gefunden
+            hostname: hostname || null,
             ip: ip,
             rtt: rtts,
             rawLine: line,
         };
     }
-    // logger.debug({ line }, "Unparsed traceroute line"); // Optional: Log unparsed lines
-    return null; // Nicht als Hop-Zeile erkannt
+    return null;
 }
 
 
@@ -279,9 +269,8 @@ async function initialize() {
         asnReader = await geoip.Reader.open(asnDbPath);
         logger.info('MaxMind databases loaded successfully.');
 
-        // Kein explizites Laden mehr für 'oui' nötig.
-        // Die Daten werden bei der ersten Verwendung automatisch geladen/aktualisiert.
-        logger.info('MAC address lookup data (oui) will be loaded on first use.');
+        // Kein explizites Laden für 'macaddress' nötig.
+        logger.info('MAC address lookup data (macaddress) will be loaded on first use.');
 
     } catch (error) {
         logger.fatal({ error: error.message, stack: error.stack }, 'Could not initialize MaxMind databases. Exiting.');
@@ -290,20 +279,18 @@ async function initialize() {
 }
 
 // --- Middleware ---
-app.use(cors()); // Erlaubt Anfragen von anderen Origins
-app.use(express.json()); // Parst JSON-Request-Bodies
-
-// Vertraue Proxy-Headern (vorsichtig verwenden!)
-app.set('trust proxy', 2); // Vertraue zwei Proxys (externer Nginx + interner Nginx)
+app.use(cors());
+app.use(express.json());
+app.set('trust proxy', 2);
 
 // Rate Limiter
 const generalLimiter = rateLimit({
     windowMs: 5 * 60 * 1000, // 5 Minuten
-    max: process.env.NODE_ENV === 'production' ? 20 : 200, // Mehr Anfragen im Dev erlauben
+    max: process.env.NODE_ENV === 'production' ? 20 : 200,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests from this IP, please try again after 5 minutes' },
-    keyGenerator: (req, res) => req.ip || req.socket.remoteAddress, // IP des Clients als Schlüssel
+    keyGenerator: (req, res) => req.ip || req.socket.remoteAddress,
     handler: (req, res, next, options) => {
         logger.warn({ ip: req.ip || req.socket.remoteAddress, route: req.originalUrl }, 'Rate limit exceeded');
         res.status(options.statusCode).send(options.message);
@@ -323,9 +310,8 @@ app.use('/api/mac-lookup', generalLimiter);
 
 // Haupt-Endpunkt: Liefert alle Infos zur IP des Clients
 app.get('/api/ipinfo', async (req, res) => {
-    const requestIp = req.ip || req.socket.remoteAddress; // req.ip berücksichtigt 'trust proxy'
+    const requestIp = req.ip || req.socket.remoteAddress;
     logger.info({ ip: requestIp, method: req.method, url: req.originalUrl }, 'ipinfo request received');
-
     const clientIp = getCleanIp(requestIp);
     logger.debug({ rawIp: requestIp, cleanedIp: clientIp }, 'IP cleaning result');
 
@@ -357,7 +343,7 @@ app.get('/api/ipinfo', async (req, res) => {
                 longitude: geoData.location?.longitude,
                 timezone: geoData.location?.timeZone,
             };
-            geo = Object.fromEntries(Object.entries(geo).filter(([_, v]) => v != null)); // Entferne leere Werte
+            geo = Object.fromEntries(Object.entries(geo).filter(([_, v]) => v != null));
             logger.debug({ ip: clientIp, geo }, 'GeoIP lookup successful');
         } catch (e) {
             logger.warn({ ip: clientIp, error: e.message }, `MaxMind City lookup failed`);
@@ -371,7 +357,7 @@ app.get('/api/ipinfo', async (req, res) => {
                 number: asnData.autonomousSystemNumber,
                 organization: asnData.autonomousSystemOrganization,
             };
-             asn = Object.fromEntries(Object.entries(asn).filter(([_, v]) => v != null)); // Entferne leere Werte
+             asn = Object.fromEntries(Object.entries(asn).filter(([_, v]) => v != null));
              logger.debug({ ip: clientIp, asn }, 'ASN lookup successful');
         } catch (e) {
             logger.warn({ ip: clientIp, error: e.message }, `MaxMind ASN lookup failed`);
@@ -417,7 +403,6 @@ app.get('/api/ping', async (req, res) => {
         logger.warn({ requestIp, targetIp }, 'Invalid target IP for ping');
         return res.status(400).json({ error: 'Invalid target IP address provided.' });
     }
-
     if (isPrivateIp(targetIp)) {
         logger.warn({ requestIp, targetIp }, 'Attempt to ping private IP blocked');
         return res.status(403).json({ error: 'Operations on private or local IP addresses are not allowed.' });
@@ -426,7 +411,7 @@ app.get('/api/ping', async (req, res) => {
     try {
         const pingCount = process.env.PING_COUNT || '4';
         const countArg = parseInt(pingCount, 10) || 4;
-        const args = ['-c', `${countArg}`, targetIp]; // Linux/macOS
+        const args = ['-c', `${countArg}`, targetIp];
         const command = 'ping';
 
         logger.info({ requestIp, targetIp, command: `${command} ${args.join(' ')}` }, 'Executing ping');
@@ -437,10 +422,8 @@ app.get('/api/ping', async (req, res) => {
         res.json({ success: true, ...parsedResult });
 
     } catch (error) {
-        // executeCommand loggt bereits Details
         logger.error({ requestIp, targetIp, error: error.message }, 'Ping command failed');
-        // Sende strukturierte Fehlermeldung, wenn möglich
-        const parsedError = parsePingOutput(error.message); // Versuche, Fehler aus Ping-Output zu parsen
+        const parsedError = parsePingOutput(error.message);
         res.status(500).json({
              success: false,
              error: `Ping command failed: ${parsedError.error || error.message}`,
@@ -450,7 +433,7 @@ app.get('/api/ping', async (req, res) => {
 });
 
 // Traceroute Endpunkt (Server-Sent Events)
-app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir streamen
+app.get('/api/traceroute', (req, res) => {
     const targetIpRaw = req.query.targetIp;
     const targetIp = typeof targetIpRaw === 'string' ? targetIpRaw.trim() : targetIpRaw;
     const requestIp = req.ip || req.socket.remoteAddress;
@@ -461,7 +444,6 @@ app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir strea
         logger.warn({ requestIp, targetIp }, 'Invalid target IP for traceroute');
         return res.status(400).json({ error: 'Invalid target IP address provided.' });
     }
-
     if (isPrivateIp(targetIp)) {
         logger.warn({ requestIp, targetIp }, 'Attempt to traceroute private IP blocked');
         return res.status(403).json({ error: 'Operations on private or local IP addresses are not allowed.' });
@@ -469,27 +451,25 @@ app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir strea
 
     try {
         logger.info({ requestIp, targetIp }, `Starting traceroute stream...`);
-
-        // Set SSE Headers
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
-        res.setHeader('X-Accel-Buffering', 'no'); // Wichtig für Nginx-Proxies
-        res.flushHeaders(); // Send headers immediately
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders();
 
-        const args = ['-n', targetIp]; // Linux/macOS, -n für keine Namensauflösung (schneller)
+        const args = ['-n', targetIp];
         const command = 'traceroute';
         const proc = spawn(command, args);
         logger.info({ requestIp, targetIp, command: `${command} ${args.join(' ')}` }, 'Spawned traceroute process');
 
-        let buffer = ''; // Buffer für unvollständige Zeilen
+        let buffer = '';
 
         const sendEvent = (event, data) => {
             try {
                 res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
             } catch (e) {
                 logger.error({ requestIp, targetIp, event, error: e.message }, "Error writing to SSE stream (client likely disconnected)");
-                proc.kill(); // Beende Prozess, wenn Schreiben fehlschlägt
+                proc.kill();
                 if (!res.writableEnded) res.end();
             }
         };
@@ -497,8 +477,7 @@ app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir strea
         proc.stdout.on('data', (data) => {
             buffer += data.toString();
             let lines = buffer.split('\n');
-            buffer = lines.pop() || ''; // Letzte (evtl. unvollständige) Zeile zurück in den Buffer
-
+            buffer = lines.pop() || '';
             lines.forEach(line => {
                 const parsed = parseTracerouteLine(line);
                 if (parsed) {
@@ -524,15 +503,11 @@ app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir strea
         });
 
         proc.on('close', (code) => {
-            if (buffer) { // Verarbeite letzte Zeile im Buffer
+            if (buffer) {
                  const parsed = parseTracerouteLine(buffer);
-                 if (parsed) {
-                     sendEvent('hop', parsed);
-                 } else if (buffer.trim()) {
-                     sendEvent('info', { message: buffer.trim() });
-                 }
+                 if (parsed) sendEvent('hop', parsed);
+                 else if (buffer.trim()) sendEvent('info', { message: buffer.trim() });
             }
-
             if (code !== 0) {
                 logger.error({ requestIp, targetIp, exitCode: code }, `Traceroute command finished with error code ${code}`);
                 sendEvent('error', { error: `Traceroute command failed with exit code ${code}` });
@@ -543,22 +518,17 @@ app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir strea
              if (!res.writableEnded) res.end();
         });
 
-        // Handle client disconnect
         req.on('close', () => {
             logger.info({ requestIp, targetIp }, 'Client disconnected from traceroute stream, killing process.');
-            if (!proc.killed) {
-                proc.kill();
-            }
+            if (!proc.killed) proc.kill();
             if (!res.writableEnded) res.end();
         });
 
     } catch (error) {
-        // Dieser Catch ist eher für synchrone Fehler vor dem Spawn
         logger.error({ requestIp, targetIp, error: error.message, stack: error.stack }, 'Error setting up traceroute stream');
         if (!res.headersSent) {
              res.status(500).json({ success: false, error: `Failed to initiate traceroute: ${error.message}` });
         } else {
-             // Wenn Header gesendet wurden, können wir nur noch versuchen, einen Fehler zu schreiben und zu beenden
              try {
                  if (!res.writableEnded) {
                     res.write(`event: error\ndata: ${JSON.stringify({ error: `Internal server error: ${error.message}` })}\n\n`);
@@ -567,43 +537,35 @@ app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir strea
              } catch (e) { logger.error({ requestIp, targetIp, error: e.message }, "Error writing final error to SSE stream"); }
         }
     }
-}); // Ende von app.get('/api/traceroute'...)
+});
 
 
 // Lookup Endpunkt für beliebige IP (GeoIP, ASN, rDNS)
 app.get('/api/lookup', async (req, res) => {
-    const targetIpRaw = req.query.targetIp; // IP kommt jetzt als Query-Parameter 'targetIp'
+    const targetIpRaw = req.query.targetIp;
     const targetIp = typeof targetIpRaw === 'string' ? targetIpRaw.trim() : targetIpRaw;
-    const requestIp = req.ip || req.socket.remoteAddress; // Nur für Logging
+    const requestIp = req.ip || req.socket.remoteAddress;
 
     logger.info({ requestIp, targetIp }, 'Lookup request received');
 
-    // Validierung: Ist es eine gültige IP?
     if (!isValidIp(targetIp)) {
         logger.warn({ requestIp, targetIp }, 'Invalid target IP for lookup');
         return res.status(400).json({ error: 'Invalid IP address provided for lookup.' });
     }
-
-    // Validierung: Ist es eine private IP?
     if (isPrivateIp(targetIp)) {
         logger.warn({ requestIp, targetIp }, 'Attempt to lookup private IP blocked');
         return res.status(403).json({ error: 'Lookup for private or local IP addresses is not supported.' });
     }
 
-    // Führe die gleichen Lookups wie bei /api/ipinfo durch, aber für targetIp
     try {
         let geo = null;
         try {
             const geoData = cityReader.city(targetIp);
             geo = {
-                city: geoData.city?.names?.en,
-                region: geoData.subdivisions?.[0]?.isoCode,
-                country: geoData.country?.isoCode,
-                countryName: geoData.country?.names?.en,
-                postalCode: geoData.postal?.code,
-                latitude: geoData.location?.latitude,
-                longitude: geoData.location?.longitude,
-                timezone: geoData.location?.timeZone,
+                city: geoData.city?.names?.en, region: geoData.subdivisions?.[0]?.isoCode,
+                country: geoData.country?.isoCode, countryName: geoData.country?.names?.en,
+                postalCode: geoData.postal?.code, latitude: geoData.location?.latitude,
+                longitude: geoData.location?.longitude, timezone: geoData.location?.timeZone,
             };
             geo = Object.fromEntries(Object.entries(geo).filter(([_, v]) => v != null));
             logger.debug({ targetIp, geo }, 'GeoIP lookup successful for lookup');
@@ -615,10 +577,7 @@ app.get('/api/lookup', async (req, res) => {
         let asn = null;
         try {
             const asnData = asnReader.asn(targetIp);
-            asn = {
-                number: asnData.autonomousSystemNumber,
-                organization: asnData.autonomousSystemOrganization,
-            };
+            asn = { number: asnData.autonomousSystemNumber, organization: asnData.autonomousSystemOrganization };
              asn = Object.fromEntries(Object.entries(asn).filter(([_, v]) => v != null));
              logger.debug({ targetIp, asn }, 'ASN lookup successful for lookup');
         } catch (e) {
@@ -632,15 +591,11 @@ app.get('/api/lookup', async (req, res) => {
             rdns = hostnames;
             logger.debug({ targetIp, rdns }, 'rDNS lookup successful for lookup');
         } catch (e) {
-            if (e.code !== 'ENOTFOUND' && e.code !== 'ENODATA') {
-                logger.warn({ targetIp, error: e.message, code: e.code }, `rDNS lookup error for lookup`);
-            } else {
-                 logger.debug({ targetIp, code: e.code }, 'rDNS lookup failed (No record) for lookup');
-            }
+            if (e.code !== 'ENOTFOUND' && e.code !== 'ENODATA') logger.warn({ targetIp, error: e.message, code: e.code }, `rDNS lookup error for lookup`);
+            else logger.debug({ targetIp, code: e.code }, 'rDNS lookup failed (No record) for lookup');
             rdns = { error: `rDNS lookup failed (${e.code || 'Unknown error'})` };
          }
 
-        // Gib die gesammelten Daten zurück
         res.json({
             ip: targetIp,
             geo: geo.error ? geo : (Object.keys(geo).length > 0 ? geo : null),
@@ -678,32 +633,16 @@ app.get('/api/dns-lookup', async (req, res) => {
     }
 
     try {
-        // dns.resolve unterstützt 'ANY', aber gibt oft nur einen Teil zurück oder wirft Fehler.
-        // Besser spezifische Typen abfragen oder dns.resolveAny verwenden (wenn verfügbar und gewünscht).
-        // Für Einfachheit hier dns.resolve.
         let records;
         if (type === 'ANY') {
-            // Versuche, gängige Typen einzeln abzufragen, da resolveAny oft nicht wie erwartet funktioniert
             const promises = [
-                dns.resolve(domain, 'A').catch(() => []),
-                dns.resolve(domain, 'AAAA').catch(() => []),
-                dns.resolve(domain, 'MX').catch(() => []),
-                dns.resolve(domain, 'TXT').catch(() => []),
-                dns.resolve(domain, 'NS').catch(() => []),
-                dns.resolve(domain, 'CNAME').catch(() => []),
+                dns.resolve(domain, 'A').catch(() => []), dns.resolve(domain, 'AAAA').catch(() => []),
+                dns.resolve(domain, 'MX').catch(() => []), dns.resolve(domain, 'TXT').catch(() => []),
+                dns.resolve(domain, 'NS').catch(() => []), dns.resolve(domain, 'CNAME').catch(() => []),
                 dns.resolve(domain, 'SOA').catch(() => []),
             ];
             const results = await Promise.all(promises);
-            records = {
-                A: results[0],
-                AAAA: results[1],
-                MX: results[2],
-                TXT: results[3],
-                NS: results[4],
-                CNAME: results[5],
-                SOA: results[6],
-            };
-            // Entferne leere Ergebnisse
+            records = { A: results[0], AAAA: results[1], MX: results[2], TXT: results[3], NS: results[4], CNAME: results[5], SOA: results[6] };
             records = Object.fromEntries(Object.entries(records).filter(([_, v]) => Array.isArray(v) ? v.length > 0 : v));
         } else {
             records = await dns.resolve(domain, type);
@@ -726,52 +665,45 @@ app.get('/api/whois-lookup', async (req, res) => {
 
     logger.info({ requestIp, query }, 'WHOIS lookup request received');
 
-    // Einfache Validierung: Muss entweder eine gültige IP oder eine Domain sein
     if (!isValidIp(query) && !isValidDomain(query)) {
         logger.warn({ requestIp, query }, 'Invalid query for WHOIS lookup');
         return res.status(400).json({ success: false, error: 'Invalid domain name or IP address provided for WHOIS lookup.' });
     }
 
     try {
-        // whois-json kann manchmal sehr lange dauern oder fehlschlagen
-        const result = await whois(query, { timeout: 10000 }); // 10 Sekunden Timeout
-
+        const result = await whois(query, { timeout: 10000 });
         logger.info({ requestIp, query }, 'WHOIS lookup successful');
         res.json({ success: true, query, result });
 
     } catch (error) {
         logger.error({ requestIp, query, error: error.message }, 'WHOIS lookup failed');
-        // Versuche, eine spezifischere Fehlermeldung zu geben
         let errorMessage = error.message;
-        if (error.message.includes('ETIMEDOUT') || error.message.includes('ESOCKETTIMEDOUT')) {
-            errorMessage = 'WHOIS server timed out.';
-        } else if (error.message.includes('ENOTFOUND')) {
-             errorMessage = 'Domain or IP not found or WHOIS server unavailable.';
-        }
+        if (error.message.includes('ETIMEDOUT') || error.message.includes('ESOCKETTIMEDOUT')) errorMessage = 'WHOIS server timed out.';
+        else if (error.message.includes('ENOTFOUND')) errorMessage = 'Domain or IP not found or WHOIS server unavailable.';
         res.status(500).json({ success: false, error: `WHOIS lookup failed: ${errorMessage}` });
     }
 });
 
-// MAC Address Lookup Endpunkt (mit 'oui' Bibliothek)
-app.get('/api/mac-lookup', async (req, res) => { // async ist hier nicht unbedingt nötig, aber schadet nicht
+// MAC Address Lookup Endpunkt (mit 'macaddress' Bibliothek)
+app.get('/api/mac-lookup', async (req, res) => {
     const macRaw = req.query.mac;
     const mac = typeof macRaw === 'string' ? macRaw.trim() : macRaw;
     const requestIp = req.ip || req.socket.remoteAddress;
 
     logger.info({ requestIp, mac }, 'MAC lookup request received');
 
-    if (!isValidMac(mac)) { // Vorabprüfung beibehalten
+    if (!isValidMac(mac)) {
         logger.warn({ requestIp, mac }, 'Invalid MAC address format for lookup');
         return res.status(400).json({ success: false, error: 'Invalid MAC address format provided.' });
     }
 
     try {
-        // oui() lädt die DB bei Bedarf und gibt den Vendor-String oder null zurück
-        const vendor = oui(mac); // Einfacher Aufruf
+        // Verwende macaddress.one() für asynchronen Lookup
+        const result = await macaddress.one(mac);
 
-        if (vendor) {
-            logger.info({ requestIp, mac, vendor }, 'MAC lookup successful');
-            res.json({ success: true, mac, vendor });
+        if (result && result.vendor) { // Prüfe, ob Ergebnis und Vendor existieren
+            logger.info({ requestIp, mac, vendor: result.vendor }, 'MAC lookup successful');
+            res.json({ success: true, mac, vendor: result.vendor });
         } else {
             logger.info({ requestIp, mac }, 'MAC lookup successful, but no vendor found');
             res.json({ success: true, mac, vendor: null, message: 'Vendor not found for this MAC address prefix.' });
@@ -779,7 +711,7 @@ app.get('/api/mac-lookup', async (req, res) => { // async ist hier nicht unbedin
 
     } catch (error) {
         // Fehler können auftreten, wenn die interne DB nicht geladen werden kann
-        // oder die Eingabe trotz Regex ungültig ist (sollte selten sein)
+        // oder die Eingabe ungültig ist
         logger.error({ requestIp, mac, error: error.message }, 'MAC lookup failed');
         res.status(500).json({ success: false, error: `MAC lookup failed: ${error.message}` });
     }
@@ -809,17 +741,15 @@ initialize().then(() => {
         logger.info(`  http://localhost:${PORT}/api/version`);
     });
 }).catch(error => {
-    // Fehler bei der Initialisierung wurde bereits geloggt.
     logger.fatal("Server could not start due to initialization errors.");
-    process.exit(1); // Beenden bei schwerwiegendem Startfehler
+    process.exit(1);
 });
 
-// Graceful Shutdown Handling (optional aber gut für Produktion)
+// Graceful Shutdown Handling
 const signals = { 'SIGINT': 2, 'SIGTERM': 15 };
 Object.keys(signals).forEach((signal) => {
   process.on(signal, () => {
     logger.info(`Received ${signal}, shutting down gracefully...`);
-    // Hier könnten noch Aufräumarbeiten stattfinden (z.B. DB-Verbindungen schließen)
     process.exit(128 + signals[signal]);
   });
 });
