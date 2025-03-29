@@ -8,6 +8,8 @@ const { spawn } = require('child_process');
 const dns = require('dns').promises;
 const pino = require('pino'); // Logging library
 const rateLimit = require('express-rate-limit'); // Rate limiting middleware
+const whois = require('whois-json'); // Hinzugefügt für WHOIS
+const macLookup = require('mac-lookup'); // Hinzugefügt für MAC Lookup
 
 // --- Logger Initialisierung ---
 const logger = pino({
@@ -70,6 +72,35 @@ function isPrivateIp(ip) {
         );
     }
     return false;
+}
+
+/**
+ * Validiert einen Domainnamen (sehr einfache Prüfung).
+ * @param {string} domain - Der zu validierende Domainname.
+ * @returns {boolean} True, wenn wahrscheinlich gültig, sonst false.
+ */
+function isValidDomain(domain) {
+    if (!domain || typeof domain !== 'string' || domain.trim().length < 3) {
+        return false;
+    }
+    // Einfache Regex: Muss mindestens einen Punkt enthalten und keine ungültigen Zeichen.
+    // Erlaubt IDNs (Internationalized Domain Names) durch \p{L}
+    const domainRegex = /^(?:[a-z0-9\p{L}](?:[a-z0-9\p{L}-]{0,61}[a-z0-9\p{L}])?\.)+[a-z0-9\p{L}][a-z0-9\p{L}-]{0,61}[a-z0-9\p{L}]$/iu;
+    return domainRegex.test(domain.trim());
+}
+
+/**
+ * Validiert eine MAC-Adresse.
+ * @param {string} mac - Die zu validierende MAC-Adresse.
+ * @returns {boolean} True, wenn gültig, sonst false.
+ */
+function isValidMac(mac) {
+    if (!mac || typeof mac !== 'string') {
+        return false;
+    }
+    // Erlaubt Formate wie 00:1A:2B:3C:4D:5E, 00-1A-2B-3C-4D-5E, 001A.2B3C.4D5E
+    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{4}\.){2}([0-9A-Fa-f]{4})$/;
+    return macRegex.test(mac.trim());
 }
 
 
@@ -246,8 +277,14 @@ async function initialize() {
         cityReader = await geoip.Reader.open(cityDbPath);
         asnReader = await geoip.Reader.open(asnDbPath);
         logger.info('MaxMind databases loaded successfully.');
+
+        // Lade MAC-Lookup Daten (asynchron)
+        logger.info('Loading MAC address lookup data...');
+        await macLookup.load(); // Lädt die Daten beim Start
+        logger.info('MAC address lookup data loaded.');
+
     } catch (error) {
-        logger.fatal({ error: error.message, stack: error.stack }, 'Could not load MaxMind databases. Exiting.');
+        logger.fatal({ error: error.message, stack: error.stack }, 'Could not initialize databases or MAC data. Exiting.');
         process.exit(1);
     }
 }
@@ -260,12 +297,12 @@ app.use(express.json()); // Parst JSON-Request-Bodies
 app.set('trust proxy', 2); // Vertraue zwei Proxys (externer Nginx + interner Nginx)
 
 // Rate Limiter
-const diagnosticLimiter = rateLimit({
+const generalLimiter = rateLimit({
     windowMs: 5 * 60 * 1000, // 5 Minuten
-    max: process.env.NODE_ENV === 'production' ? 10 : 100, // Mehr Anfragen im Dev erlauben
+    max: process.env.NODE_ENV === 'production' ? 20 : 200, // Mehr Anfragen im Dev erlauben
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: 'Too many diagnostic requests (ping/traceroute) from this IP, please try again after 5 minutes' },
+    message: { error: 'Too many requests from this IP, please try again after 5 minutes' },
     keyGenerator: (req, res) => req.ip || req.socket.remoteAddress, // IP des Clients als Schlüssel
     handler: (req, res, next, options) => {
         logger.warn({ ip: req.ip || req.socket.remoteAddress, route: req.originalUrl }, 'Rate limit exceeded');
@@ -273,9 +310,13 @@ const diagnosticLimiter = rateLimit({
     }
 });
 
-// Wende Limiter nur auf Ping und Traceroute an
-app.use('/api/ping', diagnosticLimiter);
-app.use('/api/traceroute', diagnosticLimiter);
+// Wende Limiter auf alle API-Routen an (außer /api/version und /api/ipinfo)
+app.use('/api/ping', generalLimiter);
+app.use('/api/traceroute', generalLimiter);
+app.use('/api/lookup', generalLimiter);
+app.use('/api/dns-lookup', generalLimiter); // Neu
+app.use('/api/whois-lookup', generalLimiter); // Neu
+app.use('/api/mac-lookup', generalLimiter); // Neu
 
 
 // --- Routen ---
@@ -316,6 +357,7 @@ app.get('/api/ipinfo', async (req, res) => {
                 longitude: geoData.location?.longitude,
                 timezone: geoData.location?.timeZone,
             };
+            geo = Object.fromEntries(Object.entries(geo).filter(([_, v]) => v != null)); // Entferne leere Werte
             logger.debug({ ip: clientIp, geo }, 'GeoIP lookup successful');
         } catch (e) {
             logger.warn({ ip: clientIp, error: e.message }, `MaxMind City lookup failed`);
@@ -329,6 +371,7 @@ app.get('/api/ipinfo', async (req, res) => {
                 number: asnData.autonomousSystemNumber,
                 organization: asnData.autonomousSystemOrganization,
             };
+             asn = Object.fromEntries(Object.entries(asn).filter(([_, v]) => v != null)); // Entferne leere Werte
              logger.debug({ ip: clientIp, asn }, 'ASN lookup successful');
         } catch (e) {
             logger.warn({ ip: clientIp, error: e.message }, `MaxMind ASN lookup failed`);
@@ -349,7 +392,12 @@ app.get('/api/ipinfo', async (req, res) => {
             rdns = { error: `rDNS lookup failed (${e.code || 'Unknown error'})` };
          }
 
-        res.json({ ip: clientIp, geo, asn, rdns });
+        res.json({
+            ip: clientIp,
+            geo: geo.error ? geo : (Object.keys(geo).length > 0 ? geo : null),
+            asn: asn.error ? asn : (Object.keys(asn).length > 0 ? asn : null),
+            rdns
+        });
 
     } catch (error) {
         logger.error({ ip: clientIp, error: error.message, stack: error.stack }, 'Error processing ipinfo');
@@ -442,7 +490,7 @@ app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir strea
             } catch (e) {
                 logger.error({ requestIp, targetIp, event, error: e.message }, "Error writing to SSE stream (client likely disconnected)");
                 proc.kill(); // Beende Prozess, wenn Schreiben fehlschlägt
-                res.end();
+                if (!res.writableEnded) res.end();
             }
         };
 
@@ -522,25 +570,22 @@ app.get('/api/traceroute', (req, res) => { // Beachte: nicht async, da wir strea
 }); // Ende von app.get('/api/traceroute'...)
 
 
-// Lookup Endpunkt für beliebige IP
+// Lookup Endpunkt für beliebige IP (GeoIP, ASN, rDNS)
 app.get('/api/lookup', async (req, res) => {
-    // Debug-Logs
-    logger.debug({ queryParams: req.query }, 'Received query parameters for lookup');
-
-    const targetIpRaw = req.query.targetIp; // IP kommt jetzt als Query-Parameter 'ip'
+    const targetIpRaw = req.query.targetIp; // IP kommt jetzt als Query-Parameter 'targetIp'
     const targetIp = typeof targetIpRaw === 'string' ? targetIpRaw.trim() : targetIpRaw;
     const requestIp = req.ip || req.socket.remoteAddress; // Nur für Logging
 
-    logger.info({ requestIp, targetIp }, 'Lookup request received'); // <-- Hier sollte targetIp korrekt geloggt werden
+    logger.info({ requestIp, targetIp }, 'Lookup request received');
 
     // Validierung: Ist es eine gültige IP?
-    if (!isValidIp(targetIp)) { // <-- Hier wird targetIp verwendet, scheint OK
+    if (!isValidIp(targetIp)) {
         logger.warn({ requestIp, targetIp }, 'Invalid target IP for lookup');
         return res.status(400).json({ error: 'Invalid IP address provided for lookup.' });
     }
 
     // Validierung: Ist es eine private IP?
-    if (isPrivateIp(targetIp)) { // <-- Hier wird targetIp verwendet, scheint OK
+    if (isPrivateIp(targetIp)) {
         logger.warn({ requestIp, targetIp }, 'Attempt to lookup private IP blocked');
         return res.status(403).json({ error: 'Lookup for private or local IP addresses is not supported.' });
     }
@@ -550,7 +595,6 @@ app.get('/api/lookup', async (req, res) => {
         let geo = null;
         try {
             const geoData = cityReader.city(targetIp);
-            // --- KORREKTUR HIER: Datenextraktion wieder einfügen ---
             geo = {
                 city: geoData.city?.names?.en,
                 region: geoData.subdivisions?.[0]?.isoCode,
@@ -561,8 +605,6 @@ app.get('/api/lookup', async (req, res) => {
                 longitude: geoData.location?.longitude,
                 timezone: geoData.location?.timeZone,
             };
-            // --- ENDE KORREKTUR ---
-            // Filter out null/undefined values before logging/returning (optional but cleaner)
             geo = Object.fromEntries(Object.entries(geo).filter(([_, v]) => v != null));
             logger.debug({ targetIp, geo }, 'GeoIP lookup successful for lookup');
         } catch (e) {
@@ -573,13 +615,10 @@ app.get('/api/lookup', async (req, res) => {
         let asn = null;
         try {
             const asnData = asnReader.asn(targetIp);
-             // --- KORREKTUR HIER: Datenextraktion wieder einfügen ---
             asn = {
                 number: asnData.autonomousSystemNumber,
                 organization: asnData.autonomousSystemOrganization,
             };
-             // --- ENDE KORREKTUR ---
-             // Filter out null/undefined values
              asn = Object.fromEntries(Object.entries(asn).filter(([_, v]) => v != null));
              logger.debug({ targetIp, asn }, 'ASN lookup successful for lookup');
         } catch (e) {
@@ -593,15 +632,19 @@ app.get('/api/lookup', async (req, res) => {
             rdns = hostnames;
             logger.debug({ targetIp, rdns }, 'rDNS lookup successful for lookup');
         } catch (e) {
-            // ... (rDNS Fehlerbehandlung bleibt gleich) ...
+            if (e.code !== 'ENOTFOUND' && e.code !== 'ENODATA') {
+                logger.warn({ targetIp, error: e.message, code: e.code }, `rDNS lookup error for lookup`);
+            } else {
+                 logger.debug({ targetIp, code: e.code }, 'rDNS lookup failed (No record) for lookup');
+            }
             rdns = { error: `rDNS lookup failed (${e.code || 'Unknown error'})` };
          }
 
         // Gib die gesammelten Daten zurück
         res.json({
             ip: targetIp,
-            geo: Object.keys(geo).length > 0 ? geo : null, // Sende null wenn geo leer ist (außer bei Fehler)
-            asn: Object.keys(asn).length > 0 ? asn : null, // Sende null wenn asn leer ist (außer bei Fehler)
+            geo: geo.error ? geo : (Object.keys(geo).length > 0 ? geo : null),
+            asn: asn.error ? asn : (Object.keys(asn).length > 0 ? asn : null),
             rdns,
         });
 
@@ -610,6 +653,137 @@ app.get('/api/lookup', async (req, res) => {
         res.status(500).json({ error: 'Internal server error while processing lookup.' });
     }
 });
+
+// --- NEUE ENDPUNKTE ---
+
+// DNS Lookup Endpunkt
+app.get('/api/dns-lookup', async (req, res) => {
+    const domainRaw = req.query.domain;
+    const domain = typeof domainRaw === 'string' ? domainRaw.trim() : domainRaw;
+    const typeRaw = req.query.type;
+    const type = typeof typeRaw === 'string' ? typeRaw.trim().toUpperCase() : 'ANY';
+    const requestIp = req.ip || req.socket.remoteAddress;
+
+    logger.info({ requestIp, domain, type }, 'DNS lookup request received');
+
+    if (!isValidDomain(domain)) {
+        logger.warn({ requestIp, domain }, 'Invalid domain for DNS lookup');
+        return res.status(400).json({ error: 'Invalid domain name provided.' });
+    }
+
+    const validTypes = ['A', 'AAAA', 'MX', 'TXT', 'NS', 'CNAME', 'SOA', 'SRV', 'PTR', 'ANY'];
+    if (!validTypes.includes(type)) {
+        logger.warn({ requestIp, domain, type }, 'Invalid record type for DNS lookup');
+        return res.status(400).json({ error: `Invalid record type provided. Valid types are: ${validTypes.join(', ')}` });
+    }
+
+    try {
+        // dns.resolve unterstützt 'ANY', aber gibt oft nur einen Teil zurück oder wirft Fehler.
+        // Besser spezifische Typen abfragen oder dns.resolveAny verwenden (wenn verfügbar und gewünscht).
+        // Für Einfachheit hier dns.resolve.
+        let records;
+        if (type === 'ANY') {
+            // Versuche, gängige Typen einzeln abzufragen, da resolveAny oft nicht wie erwartet funktioniert
+            const promises = [
+                dns.resolve(domain, 'A').catch(() => []),
+                dns.resolve(domain, 'AAAA').catch(() => []),
+                dns.resolve(domain, 'MX').catch(() => []),
+                dns.resolve(domain, 'TXT').catch(() => []),
+                dns.resolve(domain, 'NS').catch(() => []),
+                dns.resolve(domain, 'CNAME').catch(() => []),
+                dns.resolve(domain, 'SOA').catch(() => []),
+            ];
+            const results = await Promise.all(promises);
+            records = {
+                A: results[0],
+                AAAA: results[1],
+                MX: results[2],
+                TXT: results[3],
+                NS: results[4],
+                CNAME: results[5],
+                SOA: results[6],
+            };
+            // Entferne leere Ergebnisse
+            records = Object.fromEntries(Object.entries(records).filter(([_, v]) => Array.isArray(v) ? v.length > 0 : v));
+        } else {
+            records = await dns.resolve(domain, type);
+        }
+
+        logger.info({ requestIp, domain, type }, 'DNS lookup successful');
+        res.json({ success: true, domain, type, records });
+
+    } catch (error) {
+        logger.error({ requestIp, domain, type, error: error.message, code: error.code }, 'DNS lookup failed');
+        res.status(500).json({ success: false, error: `DNS lookup failed: ${error.message} (Code: ${error.code})` });
+    }
+});
+
+// WHOIS Lookup Endpunkt
+app.get('/api/whois-lookup', async (req, res) => {
+    const queryRaw = req.query.query;
+    const query = typeof queryRaw === 'string' ? queryRaw.trim() : queryRaw;
+    const requestIp = req.ip || req.socket.remoteAddress;
+
+    logger.info({ requestIp, query }, 'WHOIS lookup request received');
+
+    // Einfache Validierung: Muss entweder eine gültige IP oder eine Domain sein
+    if (!isValidIp(query) && !isValidDomain(query)) {
+        logger.warn({ requestIp, query }, 'Invalid query for WHOIS lookup');
+        return res.status(400).json({ error: 'Invalid domain name or IP address provided for WHOIS lookup.' });
+    }
+
+    try {
+        // whois-json kann manchmal sehr lange dauern oder fehlschlagen
+        const result = await whois(query, { timeout: 10000 }); // 10 Sekunden Timeout
+
+        logger.info({ requestIp, query }, 'WHOIS lookup successful');
+        res.json({ success: true, query, result });
+
+    } catch (error) {
+        logger.error({ requestIp, query, error: error.message }, 'WHOIS lookup failed');
+        // Versuche, eine spezifischere Fehlermeldung zu geben
+        let errorMessage = error.message;
+        if (error.message.includes('ETIMEDOUT') || error.message.includes('ESOCKETTIMEDOUT')) {
+            errorMessage = 'WHOIS server timed out.';
+        } else if (error.message.includes('ENOTFOUND')) {
+             errorMessage = 'Domain or IP not found or WHOIS server unavailable.';
+        }
+        res.status(500).json({ success: false, error: `WHOIS lookup failed: ${errorMessage}` });
+    }
+});
+
+// MAC Address Lookup Endpunkt
+app.get('/api/mac-lookup', async (req, res) => {
+    const macRaw = req.query.mac;
+    const mac = typeof macRaw === 'string' ? macRaw.trim() : macRaw;
+    const requestIp = req.ip || req.socket.remoteAddress;
+
+    logger.info({ requestIp, mac }, 'MAC lookup request received');
+
+    if (!isValidMac(mac)) {
+        logger.warn({ requestIp, mac }, 'Invalid MAC address for lookup');
+        return res.status(400).json({ error: 'Invalid MAC address format provided.' });
+    }
+
+    try {
+        // mac-lookup verwendet eine lokale Datenbank, sollte schnell sein
+        const vendor = await macLookup.lookup(mac); // lookup ist jetzt async
+
+        if (vendor) {
+            logger.info({ requestIp, mac, vendor }, 'MAC lookup successful');
+            res.json({ success: true, mac, vendor });
+        } else {
+            logger.info({ requestIp, mac }, 'MAC lookup successful, but no vendor found');
+            res.json({ success: true, mac, vendor: null, message: 'Vendor not found for this MAC address prefix.' });
+        }
+
+    } catch (error) {
+        // Fehler sollten nur auftreten, wenn die DB nicht geladen wurde oder die Eingabe ungültig ist (sollte durch isValidMac abgefangen werden)
+        logger.error({ requestIp, mac, error: error.message }, 'MAC lookup failed');
+        res.status(500).json({ success: false, error: `MAC lookup failed: ${error.message}` });
+    }
+});
+
 
 // Version Endpunkt
 app.get('/api/version', (req, res) => {
@@ -628,6 +802,9 @@ initialize().then(() => {
         logger.info(`  http://localhost:${PORT}/api/ping?targetIp=<ip>`);
         logger.info(`  http://localhost:${PORT}/api/traceroute?targetIp=<ip>`);
         logger.info(`  http://localhost:${PORT}/api/lookup?targetIp=<ip>`);
+        logger.info(`  http://localhost:${PORT}/api/dns-lookup?domain=<domain>&type=<type>`); // Neu
+        logger.info(`  http://localhost:${PORT}/api/whois-lookup?query=<domain_or_ip>`); // Neu
+        logger.info(`  http://localhost:${PORT}/api/mac-lookup?mac=<mac_address>`); // Neu
         logger.info(`  http://localhost:${PORT}/api/version`);
     });
 }).catch(error => {
@@ -641,6 +818,7 @@ const signals = { 'SIGINT': 2, 'SIGTERM': 15 };
 Object.keys(signals).forEach((signal) => {
   process.on(signal, () => {
     logger.info(`Received ${signal}, shutting down gracefully...`);
+    // Hier könnten noch Aufräumarbeiten stattfinden (z.B. DB-Verbindungen schließen)
     process.exit(128 + signals[signal]);
   });
 });

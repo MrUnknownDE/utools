@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IP Info & Diagnostics</title>
+    <title>IP Info & Network Tools - uTools</title> <!-- Titel angepasst -->
     <!-- Tailwind CSS Play CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Leaflet CSS -->
@@ -39,7 +39,7 @@
         #ip-address { cursor: pointer; }
 
         /* Traceroute Output Formatierung */
-        #traceroute-output pre {
+        #traceroute-output pre, .result-pre { /* Gemeinsamer Stil für <pre> */
             white-space: pre-wrap; /* Zeilenumbruch */
             word-break: break-all; /* Lange Zeilen umbrechen */
             font-family: monospace;
@@ -49,8 +49,9 @@
             border-radius: 0.375rem; /* rounded-md */
             max-height: 400px;
             overflow-y: auto;
+            font-size: 0.875rem; /* text-sm */
         }
-        #traceroute-output .hop-line { margin-bottom: 0.25rem; font-size: 0.875rem; } /* text-sm */
+        #traceroute-output .hop-line { margin-bottom: 0.25rem; }
         #traceroute-output .hop-number { display: inline-block; width: 30px; text-align: right; margin-right: 10px; color: #9ca3af; } /* Grau */
         #traceroute-output .hop-ip { color: #60a5fa; } /* Blau */
         #traceroute-output .hop-hostname { color: #a78bfa; } /* Lila */
@@ -61,30 +62,38 @@
         #traceroute-output .end-line { color: #a78bfa; font-weight: bold; margin-top: 10px;} /* Lila */
 
         /* Navigations-Styling */
-        nav ul { list-style: none; padding: 0; margin: 0; display: flex; gap: 1rem; }
-        nav a { color: #c4b5fd; /* purple-300 */ text-decoration: none; }
+        nav ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 1rem; } /* flex-wrap hinzugefügt */
+        nav a { color: #c4b5fd; /* purple-300 */ text-decoration: none; white-space: nowrap; } /* nowrap hinzugefügt */
         nav a:hover { color: #a78bfa; /* purple-400 */ text-decoration: underline; }
-        header { background-color: #374151; /* gray-700 */ padding: 1rem; margin-bottom: 1.5rem; border-radius: 0.5rem; /* rounded-lg */ display: flex; justify-content: space-between; align-items: center; }
+        header { background-color: #374151; /* gray-700 */ padding: 1rem; margin-bottom: 1.5rem; border-radius: 0.5rem; /* rounded-lg */ display: flex; flex-direction: column; align-items: center; gap: 0.5rem; } /* Flex direction geändert */
+        @media (min-width: 768px) { /* md breakpoint */
+             header { flex-direction: row; justify-content: space-between; }
+        }
         header h1 { font-size: 1.5rem; /* text-2xl */ font-weight: bold; color: #e5e7eb; /* gray-200 */ }
+
+        /* Hilfsklasse zum Verstecken */
+        .hidden { display: none; }
 
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 font-sans p-4 md:p-8">
 
     <header>
-        <h1>uTools</h1>
+        <h1>uTools Network Suite</h1> <!-- Name angepasst -->
         <nav>
             <ul>
-                <li><a href="index.html">IP Info</a></li>
+                <li><a href="index.html">IP Info & Tools</a></li> <!-- Angepasst -->
                 <li><a href="subnet-calculator.html">Subnetz Rechner</a></li>
-                <!-- Weitere Menüpunkte hier hinzufügen -->
+                <li><a href="dns-lookup.html">DNS Lookup</a></li>
+                <li><a href="whois-lookup.html">WHOIS Lookup</a></li>
+                <li><a href="mac-lookup.html">MAC Lookup</a></li>
             </ul>
         </nav>
     </header>
 
     <div class="container mx-auto max-w-4xl bg-gray-800 rounded-lg shadow-xl p-6">
 
-        <h1 class="text-3xl font-bold mb-6 text-purple-400 glitch-text text-center">IP Information & Diagnostics</h1>
+        <h1 class="text-3xl font-bold mb-6 text-purple-400 glitch-text text-center">IP Information & Network Tools</h1> <!-- Titel angepasst -->
 
         <!-- Bereich für EIGENE IP-Infos -->
         <div id="info-section" class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -150,7 +159,7 @@
                        class="flex-grow px-3 py-2 bg-gray-800 border border-gray-600 rounded text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono">
                 <button id="lookup-button"
                         class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out">
-                    Lookup
+                    Lookup IP
                 </button>
             </div>
             <div id="lookup-error" class="text-red-400 mb-4 hidden"></div>
@@ -211,7 +220,6 @@
             </div>
         </div>
 
-
         <!-- Bereich für Traceroute -->
         <div id="traceroute-section" class="mt-8 p-4 bg-gray-700 rounded hidden">
              <h2 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-1 mb-4">Traceroute Results</h2>
@@ -227,7 +235,7 @@
 
         <!-- Footer für Version -->
         <footer class="mt-8 pt-4 border-t border-gray-600 text-center text-xs text-gray-500">
-            <p>&copy; 2025 <a href="https://johanneskr.de">Johannes Krüger</a></p>
+            <p>&copy; 2025 <a href="https://johanneskr.de" class="text-purple-400 hover:underline">Johannes Krüger</a></p>
             <p>Version: <span id="commit-sha" class="font-mono">loading...</span></p>
         </footer>
 
@@ -240,6 +248,5 @@
             crossorigin=""></script>
     <!-- Eigene JS-Logik -->
     <script src="script.js"></script>
-    <!-- Kein subnet-calculator.js hier, da es nur auf der Subnetz-Seite benötigt wird -->
 </body>
 </html>

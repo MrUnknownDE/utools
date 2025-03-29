@@ -3,16 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IP Subnetz Rechner - Netzwerk Tools</title>
+    <title>IP Subnetz Rechner - uTools</title> <!-- Titel angepasst -->
     <!-- Tailwind CSS Play CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Eigene Styles (für Navigation etc., wie in index.html) -->
     <style>
         /* Navigations-Styling */
-        nav ul { list-style: none; padding: 0; margin: 0; display: flex; gap: 1rem; }
-        nav a { color: #c4b5fd; /* purple-300 */ text-decoration: none; }
+        nav ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 1rem; } /* flex-wrap hinzugefügt */
+        nav a { color: #c4b5fd; /* purple-300 */ text-decoration: none; white-space: nowrap; } /* nowrap hinzugefügt */
         nav a:hover { color: #a78bfa; /* purple-400 */ text-decoration: underline; }
-        header { background-color: #374151; /* gray-700 */ padding: 1rem; margin-bottom: 1.5rem; border-radius: 0.5rem; /* rounded-lg */ display: flex; justify-content: space-between; align-items: center; }
+        header { background-color: #374151; /* gray-700 */ padding: 1rem; margin-bottom: 1.5rem; border-radius: 0.5rem; /* rounded-lg */ display: flex; flex-direction: column; align-items: center; gap: 0.5rem; } /* Flex direction geändert */
+        @media (min-width: 768px) { /* md breakpoint */
+             header { flex-direction: row; justify-content: space-between; }
+        }
         header h1 { font-size: 1.5rem; /* text-2xl */ font-weight: bold; color: #e5e7eb; /* gray-200 */ }
 
         /* Styling für Formular und Ergebnisse */
@@ -103,18 +106,21 @@
         #examples .example-link:hover {
             color: #c4b5fd; /* purple-300 */
         }
+        .hidden { display: none; }
 
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 font-sans p-4 md:p-8">
 
     <header>
-        <h1>uTools</h1>
+        <h1>uTools Network Suite</h1> <!-- Titel angepasst -->
         <nav>
             <ul>
-                <li><a href="index.html">IP Info</a></li>
+                <li><a href="index.html">IP Info & Tools</a></li> <!-- Angepasst -->
                 <li><a href="subnet-calculator.html">Subnetz Rechner</a></li>
-                <!-- Weitere Menüpunkte hier hinzufügen -->
+                <li><a href="dns-lookup.html">DNS Lookup</a></li> <!-- Neu -->
+                <li><a href="whois-lookup.html">WHOIS Lookup</a></li> <!-- Neu -->
+                <li><a href="mac-lookup.html">MAC Lookup</a></li> <!-- Neu -->
             </ul>
         </nav>
     </header>
@@ -143,7 +149,7 @@
             </button>
         </form>
 
-        <div id="results" class="bg-gray-700 rounded p-6">
+        <div id="results" class="bg-gray-700 rounded p-6 hidden"> <!-- Ergebnisse initial verstecken -->
             <h3 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-2 mb-4">Ergebnisse:</h3>
             <div class="space-y-2 text-sm">
                 <p><strong>Netzwerkadresse:</strong> <span id="network-address" class="font-mono text-purple-400">-</span></p>
@@ -197,17 +203,22 @@
              <p class="mt-4 text-xs text-gray-400">Klicken Sie auf "Beispiel", um die Felder oben auszufüllen und die Berechnung zu starten.</p>
         </div>
 
+         <!-- Globaler Fehlerbereich -->
+         <div id="global-error" class="mt-6 p-4 bg-red-800 text-red-100 rounded hidden"></div>
+
     </div>
 
     <footer class="mt-8 pt-4 border-t border-gray-600 text-center text-xs text-gray-500">
-        <p>&copy; 2025 <a href="https://johanneskr.de">Johannes Krüger</a></p>
+        <p>&copy; 2025 <a href="https://johanneskr.de" class="text-purple-400 hover:underline">Johannes Krüger</a></p>
+        <p>Version: <span id="commit-sha" class="font-mono">loading...</span></p> <!-- Footer mit Version hinzugefügt -->
     </footer>
 
     <!-- Nur das Skript für den Rechner laden -->
     <script src="subnet-calculator.js"></script>
     <script>
-        // Kleine Ergänzung, um die Beispiel-Links klickbar zu machen
+        // Kleine Ergänzung, um die Beispiel-Links klickbar zu machen und Version zu laden
         document.addEventListener('DOMContentLoaded', () => {
+            // Beispiel-Links
             document.querySelectorAll('.example-link').forEach(link => {
                 link.addEventListener('click', (event) => {
                     const ip = event.target.getAttribute('data-ip');
@@ -219,6 +230,30 @@
                     window.scrollTo({ top: 0, behavior: 'smooth' }); // Nach oben scrollen
                 });
             });
+
+            // Version laden (gemeinsame Funktion)
+            const commitShaEl = document.getElementById('commit-sha');
+            const globalErrorEl = document.getElementById('global-error');
+            const API_BASE_URL = '/api'; // Muss hier definiert sein, wenn nicht global
+
+            async function fetchVersionInfo() {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/version`);
+                    if (!response.ok) throw new Error(`Network response: ${response.statusText} (${response.status})`);
+                    const data = await response.json();
+                    if (commitShaEl) {
+                        commitShaEl.textContent = data.commitSha || 'unknown';
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch version info:', error);
+                    if (commitShaEl) commitShaEl.textContent = 'error';
+                    if (globalErrorEl) { // Zeige Fehler global an, wenn Element existiert
+                         globalErrorEl.textContent = `Error loading version: ${error.message}`;
+                         globalErrorEl.classList.remove('hidden');
+                    }
+                }
+            }
+            fetchVersionInfo();
         });
     </script>
 </body>

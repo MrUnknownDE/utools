@@ -1,4 +1,4 @@
-// script.js
+// script.js - Hauptlogik für index.html (IP Info, IP Lookup, Traceroute)
 document.addEventListener('DOMContentLoaded', () => {
     // --- DOM Elements (User IP Info) ---
     const ipAddressEl = document.getElementById('ip-address');
@@ -23,7 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const geoErrorEl = document.getElementById('geo-error');
     const asnErrorEl = document.getElementById('asn-error');
     const rdnsErrorEl = document.getElementById('rdns-error');
-    // Get references to the info containers themselves
     const geoInfo = document.getElementById('geo-info');
     const asnInfo = document.getElementById('asn-info');
     const rdnsInfo = document.getElementById('rdns-info');
@@ -83,12 +82,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /** Zeigt globale Fehler an */
     function showGlobalError(message) {
+        if (!globalErrorEl) return;
         globalErrorEl.textContent = `Error: ${message}`;
         globalErrorEl.classList.remove('hidden');
     }
 
     /** Versteckt globale Fehler */
     function hideGlobalError() {
+        if (!globalErrorEl) return;
         globalErrorEl.classList.add('hidden');
     }
 
@@ -105,7 +106,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (errorElement) errorElement.textContent = ''; // Clear previous error
 
         // Zeige das Elternelement des valueElements, falls es vorher versteckt war (für initiale Ladeanzeige)
-        // This should be the data container div (e.g., the div inside #geo-info)
         const dataContainer = valueElement?.closest('div:not(.loader)'); // Find closest parent div that isn't a loader
         if (dataContainer?.classList.contains('hidden')) {
             dataContainer.classList.remove('hidden');
@@ -148,7 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (listElement) listElement.appendChild(li);
                 });
             } else {
-                 if (listElement) listElement.innerHTML = '<li>-</li>';
+                 if (listElement) listElement.innerHTML = '<li>No rDNS records found.</li>'; // Klarere Meldung
             }
         } else if (rdnsData && rdnsData.error) {
             if (listElement) listElement.innerHTML = '<li>-</li>';
@@ -169,6 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
      * @returns {L.Map | null} Die Karteninstanz oder null bei Fehler.
      */
     function initOrUpdateMap(mapId, lat, lon, mapElement, loaderElement, messageElement) {
+        if (!mapElement || !loaderElement || !messageElement) return null; // Exit if elements are missing
         loaderElement.classList.add('hidden'); // Hide loader first
 
         // Use a unique variable name for the map instance based on mapId
@@ -185,13 +186,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 L.marker([lat, lon]).addTo(mapInstance).bindPopup(`Approximate Location`).openPopup();
             } else {
-                mapInstance = L.map(mapId).setView([lat, lon], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '© OpenStreetMap contributors'
-                }).addTo(mapInstance);
-                L.marker([lat, lon]).addTo(mapInstance).bindPopup(`Approximate Location`).openPopup();
-                window[mapId + '_instance'] = mapInstance; // Store instance
+                try {
+                    mapInstance = L.map(mapId).setView([lat, lon], 13);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        maxZoom: 19,
+                        attribution: '© OpenStreetMap contributors'
+                    }).addTo(mapInstance);
+                    L.marker([lat, lon]).addTo(mapInstance).bindPopup(`Approximate Location`).openPopup();
+                    window[mapId + '_instance'] = mapInstance; // Store instance
+                } catch (e) {
+                    console.error(`Leaflet map initialization failed for ${mapId}:`, e);
+                    mapElement.classList.add('hidden');
+                    messageElement.classList.remove('hidden');
+                    messageElement.textContent = 'Error initializing map.';
+                    return null;
+                }
             }
             // Invalidate size after showing/updating to prevent grey tiles
             setTimeout(() => {
@@ -218,10 +227,10 @@ document.addEventListener('DOMContentLoaded', () => {
         hideGlobalError();
         [ipLoader, geoLoader, asnLoader, rdnsLoader, mapLoader].forEach(l => l?.classList.remove('hidden'));
         // Hide data elements initially (containers are hidden by default in HTML)
-        ipAddressEl.classList.add('hidden');
-        mapEl.classList.add('hidden');
+        if (ipAddressEl) ipAddressEl.classList.add('hidden');
+        if (mapEl) mapEl.classList.add('hidden');
         // Ensure map message is hidden initially
-        mapMessageEl.classList.add('hidden');
+        if (mapMessageEl) mapMessageEl.classList.add('hidden');
 
 
         try {
@@ -232,8 +241,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             currentIp = data.ip;
             updateField(ipAddressEl, data.ip, ipLoader);
-            ipAddressEl.classList.remove('hidden'); // Show IP element
-            if (data.ip) ipAddressEl.addEventListener('click', handleIpClick);
+            if (ipAddressEl) {
+                ipAddressEl.classList.remove('hidden'); // Show IP element
+                if (data.ip) ipAddressEl.addEventListener('click', handleIpClick);
+            }
 
             updateField(countryEl, data.geo?.countryName ? `${data.geo.countryName} (${data.geo.country})` : null, null, geoErrorEl);
             updateField(regionEl, data.geo?.region);
@@ -258,24 +269,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dataDiv = container?.querySelector('div:not(.loader)'); // Select the data div, not the loader
                 if (dataDiv) dataDiv.classList.remove('hidden');
             });
-            mapMessageEl.textContent = 'Map could not be loaded due to an error.';
-            mapMessageEl.classList.remove('hidden');
+            if (mapMessageEl) {
+                mapMessageEl.textContent = 'Map could not be loaded due to an error.';
+                mapMessageEl.classList.remove('hidden');
+            }
         }
     }
 
     /** Ruft die Versionsinformationen (Commit SHA) ab */
     async function fetchVersionInfo() {
+        if (!commitShaEl) return; // Don't fetch if element doesn't exist
         try {
             const response = await fetch(`${API_BASE_URL}/version`);
             if (!response.ok) throw new Error(`Network response: ${response.statusText} (${response.status})`);
             const data = await response.json();
-            console.log('Received Version Info:', data);
-            if (commitShaEl) {
-                commitShaEl.textContent = data.commitSha || 'unknown';
-            }
+            commitShaEl.textContent = data.commitSha || 'unknown';
         } catch (error) {
             console.error('Failed to fetch version info:', error);
-            if (commitShaEl) commitShaEl.textContent = 'error';
+            commitShaEl.textContent = 'error';
+            // Optionally show global error
+            // showGlobalError(`Could not load version info: ${error.message}`);
         }
     }
 
@@ -283,26 +296,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /** Zeigt Fehler im Lookup-Bereich an */
     function showLookupError(message) {
+        if (!lookupErrorEl) return;
         lookupErrorEl.textContent = `Error: ${message}`;
         lookupErrorEl.classList.remove('hidden');
     }
 
     /** Versteckt Fehler im Lookup-Bereich */
     function hideLookupError() {
+        if (!lookupErrorEl) return;
         lookupErrorEl.classList.add('hidden');
     }
 
      /** Setzt den Lookup-Ergebnisbereich zurück */
      function resetLookupResults() {
+        if (!lookupResultsSection) return;
         lookupResultsSection.classList.add('hidden');
-        lookupResultLoader.classList.add('hidden');
-        lookupMapLoader.classList.add('hidden');
-        lookupMapEl.classList.add('hidden');
-        lookupMapMessageEl.classList.add('hidden');
-        lookupPingResultsEl.classList.add('hidden'); // Hide ping results too
-        lookupPingLoader.classList.add('hidden');
-        lookupPingOutputEl.textContent = '';
-        lookupPingErrorEl.textContent = '';
+        if (lookupResultLoader) lookupResultLoader.classList.add('hidden');
+        if (lookupMapLoader) lookupMapLoader.classList.add('hidden');
+        if (lookupMapEl) lookupMapEl.classList.add('hidden');
+        if (lookupMapMessageEl) lookupMapMessageEl.classList.add('hidden');
+        if (lookupPingResultsEl) lookupPingResultsEl.classList.add('hidden'); // Hide ping results too
+        if (lookupPingLoader) lookupPingLoader.classList.add('hidden');
+        if (lookupPingOutputEl) lookupPingOutputEl.textContent = '';
+        if (lookupPingErrorEl) lookupPingErrorEl.textContent = '';
 
         const fieldsToClear = [
             lookupIpAddressEl, lookupCountryEl, lookupRegionEl, lookupCityEl,
@@ -312,8 +328,8 @@ document.addEventListener('DOMContentLoaded', () => {
         fieldsToClear.forEach(el => { if (el) el.textContent = ''; });
         if (lookupRdnsListEl) lookupRdnsListEl.innerHTML = '<li>-</li>';
 
-        lookupPingButton.disabled = true;
-        lookupTraceButton.disabled = true;
+        if (lookupPingButton) lookupPingButton.disabled = true;
+        if (lookupTraceButton) lookupTraceButton.disabled = true;
         currentLookupIp = null;
 
         // Remove lookup map instance if it exists
@@ -328,6 +344,8 @@ document.addEventListener('DOMContentLoaded', () => {
         resetLookupResults();
         hideLookupError();
         hideGlobalError();
+        if (!lookupResultsSection || !lookupResultLoader || !lookupMapLoader) return; // Exit if elements missing
+
         lookupResultsSection.classList.remove('hidden');
         lookupResultLoader.classList.remove('hidden');
         lookupMapLoader.classList.remove('hidden'); // Show map loader initially
@@ -358,26 +376,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
             lookupMap = initOrUpdateMap('lookup-map', data.geo?.latitude, data.geo?.longitude, lookupMapEl, lookupMapLoader, lookupMapMessageEl);
 
-            lookupPingButton.disabled = false;
-            lookupTraceButton.disabled = false;
+            if (lookupPingButton) lookupPingButton.disabled = false;
+            if (lookupTraceButton) lookupTraceButton.disabled = false;
 
         } catch (error) {
             console.error(`Failed to fetch lookup info for ${ipToLookup}:`, error);
             showLookupError(`${error.message}`);
-            lookupMapMessageEl.textContent = 'Map could not be loaded due to an error.';
-            lookupMapMessageEl.classList.remove('hidden');
-            lookupMapEl.classList.add('hidden');
-            lookupMapLoader.classList.add('hidden'); // Hide loader on error
+            if (lookupMapMessageEl) {
+                lookupMapMessageEl.textContent = 'Map could not be loaded due to an error.';
+                lookupMapMessageEl.classList.remove('hidden');
+            }
+            if (lookupMapEl) lookupMapEl.classList.add('hidden');
+            if (lookupMapLoader) lookupMapLoader.classList.add('hidden'); // Hide loader on error
 
         } finally {
-             lookupResultLoader.classList.add('hidden'); // Hide main loader
+             if (lookupResultLoader) lookupResultLoader.classList.add('hidden'); // Hide main loader
              // Map loader is handled by initOrUpdateMap
         }
     }
 
     // --- Ping Function (for Lookup) ---
     async function runLookupPing(ip) {
-        if (!ip) return;
+        if (!ip || !lookupPingResultsEl || !lookupPingLoader || !lookupPingOutputEl || !lookupPingErrorEl) return;
 
         lookupPingResultsEl.classList.remove('hidden');
         lookupPingLoader.classList.remove('hidden');
@@ -425,6 +445,8 @@ document.addEventListener('DOMContentLoaded', () => {
             showGlobalError('Cannot start traceroute: IP address is missing.');
             return;
         }
+        if (!tracerouteSection || !tracerouteOutputEl || !tracerouteLoader || !tracerouteMessage) return;
+
         if (eventSource) {
             eventSource.close();
             console.log('Previous EventSource closed.');
@@ -493,6 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function displayTracerouteLine(text, className = '') {
+         if (!tracerouteOutputEl) return;
          const lineDiv = document.createElement('div');
          if (className) lineDiv.classList.add(className);
          lineDiv.textContent = text;
@@ -501,6 +524,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function displayTracerouteHop(hopData) {
+        if (!tracerouteOutputEl) return;
         const lineDiv = document.createElement('div');
         lineDiv.classList.add('hop-line');
 
@@ -556,6 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleLookupClick() {
+        if (!lookupIpInput) return;
         const ipToLookup = lookupIpInput.value.trim();
         if (!ipToLookup) {
             showLookupError('Please enter an IP address.');
@@ -583,11 +608,12 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchIpInfo(); // Lade Infos zur eigenen IP
     fetchVersionInfo(); // Lade Versionsinfo für Footer
 
-    lookupButton.addEventListener('click', handleLookupClick);
-    lookupIpInput.addEventListener('keypress', (event) => {
+    // IP Lookup Listeners (nur wenn Elemente existieren)
+    if (lookupButton) lookupButton.addEventListener('click', handleLookupClick);
+    if (lookupIpInput) lookupIpInput.addEventListener('keypress', (event) => {
         if (event.key === 'Enter') handleLookupClick();
     });
-    lookupPingButton.addEventListener('click', handleLookupPingClick);
-    lookupTraceButton.addEventListener('click', handleLookupTraceClick);
+    if (lookupPingButton) lookupPingButton.addEventListener('click', handleLookupPingClick);
+    if (lookupTraceButton) lookupTraceButton.addEventListener('click', handleLookupTraceClick);
 
 }); // End DOMContentLoaded
