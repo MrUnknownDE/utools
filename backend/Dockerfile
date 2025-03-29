@@ -63,6 +63,10 @@ ENV GEOIP_ASN_DB=./data/GeoLite2-ASN.mmdb
 ARG GIT_COMMIT_SHA=unknown
 ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
 
+# Define build argument and environment variable for Sentry DSN
+ARG SENTRY_DSN
+ENV SENTRY_DSN=${SENTRY_DSN}
+
 
 # Run the app when the container launches
 CMD ["node", "server.js"]

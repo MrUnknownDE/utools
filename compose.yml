@@ -7,6 +7,8 @@ services:
         # Übergibt den Git Commit Hash als Build-Argument.
         # Erwartet, dass GIT_COMMIT_SHA in der Shell-Umgebung gesetzt ist (z.B. export GIT_COMMIT_SHA=$(git rev-parse --short HEAD))
         - GIT_COMMIT_SHA=${GIT_COMMIT_SHA:-unknown}
+        # Übergibt den Sentry DSN als Build-Argument (optional, falls im Code benötigt)
+        - SENTRY_DSN=https://7ea70caba68f548fb96482a573006a7b@o447623.ingest.us.sentry.io/4509062020333568
     container_name: utools_backend # Eindeutiger Name für den Container
     restart: unless-stopped
     environment:
@@ -19,6 +21,8 @@ services:
       # könnten hier aber überschrieben werden, falls nötig.
       # GEOIP_CITY_DB: ./data/GeoLite2-City.mmdb
       # GEOIP_ASN_DB: ./data/GeoLite2-ASN.mmdb
+      # Sentry DSN aus der Umgebung/ .env Datei übernehmen
+      SENTRY_DSN: ${SENTRY_DSN:-} # Wichtig für die Laufzeit
     dns:
       - 1.1.1.1    # Cloudflare DNS
       - 1.0.0.1    # Cloudflare DNS

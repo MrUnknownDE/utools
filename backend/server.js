@@ -1,5 +1,31 @@
 // server.js
 require('dotenv').config(); // Lädt Variablen aus .env in process.env
+
+// --- Sentry Initialisierung (GANZ OBEN!) ---
+const Sentry = require("@sentry/node");
+const { ProfilingIntegration } = require("@sentry/profiling-node");
+
+Sentry.init({
+  // Ersetzen Sie dies durch Ihren echten Sentry DSN
+  dsn: process.env.SENTRY_DSN || "YOUR_PLACEHOLDER_SENTRY_DSN",
+  integrations: [
+    // enable HTTP calls tracing
+    new Sentry.Integrations.Http({ tracing: true }),
+    // enable Express.js middleware tracing
+    new Sentry.Integrations.Express({ app: require('express')() }), // Temporäre App für Integration
+    new ProfilingIntegration(),
+  ],
+  // Performance Monitoring
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0, // 10% in Produktion, 100% sonst
+  // Set sampling rate for profiling - this is relative to tracesSampleRate
+  profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0, // 10% in Produktion, 100% sonst
+  environment: process.env.NODE_ENV || 'development',
+  // Optional: Release-Version setzen (z.B. über GIT_COMMIT_SHA)
+  release: process.env.GIT_COMMIT_SHA || undefined,
+});
+// --- Ende Sentry Initialisierung ---
+
+
 const express = require('express');
 const cors = require('cors');
 const geoip = require('@maxmind/geoip2-node');
@@ -22,6 +48,15 @@ const logger = pino({
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// --- Sentry Request Handler (ALS ERSTE MIDDLEWARE!) ---
+app.use(Sentry.Handlers.requestHandler());
+// --- Ende Sentry Request Handler ---
+
+// --- Sentry Tracing Handler (NACH CORS/JSON, VOR ROUTEN) ---
+app.use(Sentry.Handlers.tracingHandler());
+// --- Ende Sentry Tracing Handler ---
+
 
 // --- Globale Variablen für MaxMind Reader ---
 let cityReader;
@@ -118,8 +153,10 @@ function executeCommand(command, args) {
     return new Promise((resolve, reject) => {
         args.forEach(arg => {
             if (typeof arg === 'string' && /[;&|`$()<>]/.test(arg)) {
+                const error = new Error(`Invalid character detected in command argument.`);
                 logger.error({ command, arg }, "Potential command injection attempt detected in argument");
-                return reject(new Error(`Invalid character detected in command argument.`));
+                Sentry.captureException(error); // An Sentry senden
+                return reject(error);
             }
         });
 
@@ -130,13 +167,17 @@ function executeCommand(command, args) {
         proc.stdout.on('data', (data) => { stdout += data.toString(); });
         proc.stderr.on('data', (data) => { stderr += data.toString(); });
         proc.on('error', (err) => {
+            const error = new Error(`Failed to start command ${command}: ${err.message}`);
             logger.error({ command, args, error: err.message }, `Failed to start command`);
-            reject(new Error(`Failed to start command ${command}: ${err.message}`));
+            Sentry.captureException(error); // An Sentry senden
+            reject(error);
         });
         proc.on('close', (code) => {
             if (code !== 0) {
+                const error = new Error(`Command ${command} failed with code ${code}: ${stderr || 'No stderr output'}`);
                 logger.error({ command, args, exitCode: code, stderr: stderr.trim(), stdout: stdout.trim() }, `Command failed`);
-                reject(new Error(`Command ${command} failed with code ${code}: ${stderr || 'No stderr output'}`));
+                Sentry.captureException(error, { extra: { stdout: stdout.trim(), stderr: stderr.trim() } }); // An Sentry senden
+                reject(error);
             } else {
                 resolve(stdout);
             }
@@ -196,6 +237,7 @@ function parsePingOutput(pingOutput) {
 
     } catch (parseError) {
         logger.error({ error: parseError.message, output: pingOutput }, "Failed to parse ping output");
+        Sentry.captureException(parseError, { extra: { pingOutput } }); // An Sentry senden
         result.error = "Failed to parse ping output.";
     }
     return result;
@@ -260,6 +302,7 @@ async function initialize() {
 
     } catch (error) {
         logger.fatal({ error: error.message, stack: error.stack }, 'Could not initialize databases. Exiting.');
+        Sentry.captureException(error); // An Sentry senden
         process.exit(1);
     }
 }
@@ -279,6 +322,11 @@ const generalLimiter = rateLimit({
     keyGenerator: (req, res) => req.ip || req.socket.remoteAddress,
     handler: (req, res, next, options) => {
         logger.warn({ ip: req.ip || req.socket.remoteAddress, route: req.originalUrl }, 'Rate limit exceeded');
+        // Optional: Rate Limit Info an Sentry senden
+        Sentry.captureMessage('Rate limit exceeded', {
+            level: 'warning',
+            extra: { ip: req.ip || req.socket.remoteAddress, route: req.originalUrl }
+        });
         res.status(options.statusCode).send(options.message);
     }
 });
@@ -295,7 +343,7 @@ app.use('/api/whois-lookup', generalLimiter);
 // --- Routen ---
 
 // Haupt-Endpunkt: Liefert alle Infos zur IP des Clients
-app.get('/api/ipinfo', async (req, res) => {
+app.get('/api/ipinfo', async (req, res, next) => { // next hinzugefügt für Sentry Error Handler
     const requestIp = req.ip || req.socket.remoteAddress;
     logger.info({ ip: requestIp, method: req.method, url: req.originalUrl }, 'ipinfo request received');
     const clientIp = getCleanIp(requestIp);
@@ -312,6 +360,11 @@ app.get('/api/ipinfo', async (req, res) => {
              });
          }
         logger.error({ rawIp: requestIp, cleanedIp: clientIp }, 'Could not determine a valid client IP');
+        // Fehler an Sentry senden, bevor die Antwort gesendet wird
+        Sentry.captureMessage('Could not determine a valid client IP', {
+            level: 'error',
+            extra: { rawIp: requestIp, cleanedIp: clientIp }
+        });
         return res.status(400).json({ error: 'Could not determine a valid client IP address.', rawIp: requestIp, cleanedIp: clientIp });
     }
 
@@ -333,6 +386,8 @@ app.get('/api/ipinfo', async (req, res) => {
             logger.debug({ ip: clientIp, geo }, 'GeoIP lookup successful');
         } catch (e) {
             logger.warn({ ip: clientIp, error: e.message }, `MaxMind City lookup failed`);
+            // Optional: GeoIP Fehler an Sentry senden (kann viel Lärm verursachen)
+            // Sentry.captureException(e, { level: 'warning', extra: { ip: clientIp } });
             geo = { error: 'GeoIP lookup failed (IP not found in database or private range).' };
          }
 
@@ -347,6 +402,8 @@ app.get('/api/ipinfo', async (req, res) => {
              logger.debug({ ip: clientIp, asn }, 'ASN lookup successful');
         } catch (e) {
             logger.warn({ ip: clientIp, error: e.message }, `MaxMind ASN lookup failed`);
+            // Optional: ASN Fehler an Sentry senden
+            // Sentry.captureException(e, { level: 'warning', extra: { ip: clientIp } });
             asn = { error: 'ASN lookup failed (IP not found in database or private range).' };
         }
 
@@ -358,6 +415,8 @@ app.get('/api/ipinfo', async (req, res) => {
         } catch (e) {
             if (e.code !== 'ENOTFOUND' && e.code !== 'ENODATA') {
                 logger.warn({ ip: clientIp, error: e.message, code: e.code }, `rDNS lookup error`);
+                // Optional: rDNS Fehler an Sentry senden
+                // Sentry.captureException(e, { level: 'warning', extra: { ip: clientIp } });
             } else {
                  logger.debug({ ip: clientIp, code: e.code }, 'rDNS lookup failed (No record)');
             }
@@ -373,12 +432,13 @@ app.get('/api/ipinfo', async (req, res) => {
 
     } catch (error) {
         logger.error({ ip: clientIp, error: error.message, stack: error.stack }, 'Error processing ipinfo');
-        res.status(500).json({ error: 'Internal server error while processing IP information.' });
+        Sentry.captureException(error, { extra: { ip: clientIp } }); // An Sentry senden
+        next(error); // Fehler an Sentry Error Handler weiterleiten
     }
 });
 
 // Ping Endpunkt
-app.get('/api/ping', async (req, res) => {
+app.get('/api/ping', async (req, res, next) => { // next hinzugefügt
     const targetIpRaw = req.query.targetIp;
     const targetIp = typeof targetIpRaw === 'string' ? targetIpRaw.trim() : targetIpRaw;
     const requestIp = req.ip || req.socket.remoteAddress;
@@ -409,17 +469,20 @@ app.get('/api/ping', async (req, res) => {
 
     } catch (error) {
         logger.error({ requestIp, targetIp, error: error.message }, 'Ping command failed');
-        const parsedError = parsePingOutput(error.message);
+        Sentry.captureException(error, { extra: { requestIp, targetIp } }); // An Sentry senden
+        const parsedError = parsePingOutput(error.message); // Versuch, Fehler aus der Ausgabe zu parsen
+        // Sende 500, aber mit Fehlerdetails im Body
         res.status(500).json({
              success: false,
              error: `Ping command failed: ${parsedError.error || error.message}`,
              rawOutput: parsedError.rawOutput || error.message
         });
+        // next(error); // Optional: Fehler auch an Sentry Error Handler weiterleiten
     }
 });
 
 // Traceroute Endpunkt (Server-Sent Events)
-app.get('/api/traceroute', (req, res) => {
+app.get('/api/traceroute', (req, res) => { // Kein next hier, da SSE anders behandelt wird
     const targetIpRaw = req.query.targetIp;
     const targetIp = typeof targetIpRaw === 'string' ? targetIpRaw.trim() : targetIpRaw;
     const requestIp = req.ip || req.socket.remoteAddress;
@@ -434,6 +497,17 @@ app.get('/api/traceroute', (req, res) => {
         logger.warn({ requestIp, targetIp }, 'Attempt to traceroute private IP blocked');
         return res.status(403).json({ error: 'Operations on private or local IP addresses are not allowed.' });
     }
+
+    // Sentry Transaction für den Stream starten
+    const transaction = Sentry.startTransaction({
+        op: "traceroute.stream",
+        name: `/api/traceroute?targetIp=${targetIp}`,
+    });
+    // Scope für diese Anfrage setzen, damit Fehler/Events der Transaktion zugeordnet werden
+    Sentry.configureScope(scope => {
+        scope.setSpan(transaction);
+        scope.setContext("request", { ip: requestIp, targetIp });
+    });
 
     try {
         logger.info({ requestIp, targetIp }, `Starting traceroute stream...`);
@@ -452,11 +526,16 @@ app.get('/api/traceroute', (req, res) => {
 
         const sendEvent = (event, data) => {
             try {
-                res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+                if (!res.writableEnded) {
+                    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+                }
             } catch (e) {
                 logger.error({ requestIp, targetIp, event, error: e.message }, "Error writing to SSE stream (client likely disconnected)");
-                proc.kill();
+                Sentry.captureException(e, { level: 'warning', extra: { requestIp, targetIp, event } });
+                if (!proc.killed) proc.kill();
                 if (!res.writableEnded) res.end();
+                transaction.setStatus('internal_error');
+                transaction.finish();
             }
         };
 
@@ -479,13 +558,17 @@ app.get('/api/traceroute', (req, res) => {
         proc.stderr.on('data', (data) => {
             const errorMsg = data.toString().trim();
             logger.warn({ requestIp, targetIp, stderr: errorMsg }, 'Traceroute stderr output');
+            Sentry.captureMessage('Traceroute stderr output', { level: 'warning', extra: { requestIp, targetIp, stderr: errorMsg } });
             sendEvent('error', { error: errorMsg });
         });
 
         proc.on('error', (err) => {
             logger.error({ requestIp, targetIp, error: err.message }, `Failed to start traceroute command`);
+            Sentry.captureException(err, { extra: { requestIp, targetIp } });
             sendEvent('error', { error: `Failed to start traceroute: ${err.message}` });
             if (!res.writableEnded) res.end();
+            transaction.setStatus('internal_error');
+            transaction.finish();
         });
 
         proc.on('close', (code) => {
@@ -496,22 +579,31 @@ app.get('/api/traceroute', (req, res) => {
             }
             if (code !== 0) {
                 logger.error({ requestIp, targetIp, exitCode: code }, `Traceroute command finished with error code ${code}`);
+                Sentry.captureMessage('Traceroute command failed', { level: 'error', extra: { requestIp, targetIp, exitCode: code } });
                 sendEvent('error', { error: `Traceroute command failed with exit code ${code}` });
+                transaction.setStatus('unknown_error'); // Oder spezifischer, falls möglich
             } else {
                 logger.info({ requestIp, targetIp }, `Traceroute stream completed successfully.`);
+                transaction.setStatus('ok');
             }
              sendEvent('end', { exitCode: code });
              if (!res.writableEnded) res.end();
+             transaction.finish();
         });
 
         req.on('close', () => {
             logger.info({ requestIp, targetIp }, 'Client disconnected from traceroute stream, killing process.');
             if (!proc.killed) proc.kill();
             if (!res.writableEnded) res.end();
+            transaction.setStatus('cancelled'); // Client hat abgebrochen
+            transaction.finish();
         });
 
     } catch (error) {
         logger.error({ requestIp, targetIp, error: error.message, stack: error.stack }, 'Error setting up traceroute stream');
+        Sentry.captureException(error, { extra: { requestIp, targetIp } });
+        transaction.setStatus('internal_error');
+        transaction.finish();
         if (!res.headersSent) {
              res.status(500).json({ success: false, error: `Failed to initiate traceroute: ${error.message}` });
         } else {
@@ -527,7 +619,7 @@ app.get('/api/traceroute', (req, res) => {
 
 
 // Lookup Endpunkt für beliebige IP (GeoIP, ASN, rDNS)
-app.get('/api/lookup', async (req, res) => {
+app.get('/api/lookup', async (req, res, next) => { // next hinzugefügt
     const targetIpRaw = req.query.targetIp;
     const targetIp = typeof targetIpRaw === 'string' ? targetIpRaw.trim() : targetIpRaw;
     const requestIp = req.ip || req.socket.remoteAddress;
@@ -557,6 +649,7 @@ app.get('/api/lookup', async (req, res) => {
             logger.debug({ targetIp, geo }, 'GeoIP lookup successful for lookup');
         } catch (e) {
             logger.warn({ targetIp, error: e.message }, `MaxMind City lookup failed for lookup`);
+            // Optional: Sentry.captureException(e, { level: 'warning', extra: { targetIp } });
             geo = { error: 'GeoIP lookup failed (IP not found in database or private range).' };
          }
 
@@ -568,6 +661,7 @@ app.get('/api/lookup', async (req, res) => {
              logger.debug({ targetIp, asn }, 'ASN lookup successful for lookup');
         } catch (e) {
             logger.warn({ targetIp, error: e.message }, `MaxMind ASN lookup failed for lookup`);
+            // Optional: Sentry.captureException(e, { level: 'warning', extra: { targetIp } });
             asn = { error: 'ASN lookup failed (IP not found in database or private range).' };
         }
 
@@ -577,8 +671,12 @@ app.get('/api/lookup', async (req, res) => {
             rdns = hostnames;
             logger.debug({ targetIp, rdns }, 'rDNS lookup successful for lookup');
         } catch (e) {
-            if (e.code !== 'ENOTFOUND' && e.code !== 'ENODATA') logger.warn({ targetIp, error: e.message, code: e.code }, `rDNS lookup error for lookup`);
-            else logger.debug({ targetIp, code: e.code }, 'rDNS lookup failed (No record) for lookup');
+            if (e.code !== 'ENOTFOUND' && e.code !== 'ENODATA') {
+                logger.warn({ targetIp, error: e.message, code: e.code }, `rDNS lookup error for lookup`);
+                // Optional: Sentry.captureException(e, { level: 'warning', extra: { targetIp } });
+            } else {
+                logger.debug({ targetIp, code: e.code }, 'rDNS lookup failed (No record) for lookup');
+            }
             rdns = { error: `rDNS lookup failed (${e.code || 'Unknown error'})` };
          }
 
@@ -591,14 +689,15 @@ app.get('/api/lookup', async (req, res) => {
 
     } catch (error) {
         logger.error({ targetIp, error: error.message, stack: error.stack }, 'Error processing lookup');
-        res.status(500).json({ error: 'Internal server error while processing lookup.' });
+        Sentry.captureException(error, { extra: { targetIp, requestIp } }); // An Sentry senden
+        next(error); // An Sentry Error Handler weiterleiten
     }
 });
 
 // --- NEUE ENDPUNKTE ---
 
 // DNS Lookup Endpunkt
-app.get('/api/dns-lookup', async (req, res) => {
+app.get('/api/dns-lookup', async (req, res, next) => { // next hinzugefügt
     const domainRaw = req.query.domain;
     const domain = typeof domainRaw === 'string' ? domainRaw.trim() : domainRaw;
     const typeRaw = req.query.type;
@@ -621,15 +720,29 @@ app.get('/api/dns-lookup', async (req, res) => {
     try {
         let records;
         if (type === 'ANY') {
+            // Führe Lookups parallel aus, fange Fehler einzeln ab
             const promises = [
                 dns.resolve(domain, 'A').catch(() => []), dns.resolve(domain, 'AAAA').catch(() => []),
                 dns.resolve(domain, 'MX').catch(() => []), dns.resolve(domain, 'TXT').catch(() => []),
                 dns.resolve(domain, 'NS').catch(() => []), dns.resolve(domain, 'CNAME').catch(() => []),
                 dns.resolve(domain, 'SOA').catch(() => []),
             ];
-            const results = await Promise.all(promises);
-            records = { A: results[0], AAAA: results[1], MX: results[2], TXT: results[3], NS: results[4], CNAME: results[5], SOA: results[6] };
-            records = Object.fromEntries(Object.entries(records).filter(([_, v]) => Array.isArray(v) ? v.length > 0 : v));
+            // Warte auf alle Promises, auch wenn einige fehlschlagen
+            const results = await Promise.allSettled(promises);
+
+            // Verarbeite die Ergebnisse
+            records = {
+                A: results[0].status === 'fulfilled' ? results[0].value : { error: results[0].reason?.message || 'Lookup failed' },
+                AAAA: results[1].status === 'fulfilled' ? results[1].value : { error: results[1].reason?.message || 'Lookup failed' },
+                MX: results[2].status === 'fulfilled' ? results[2].value : { error: results[2].reason?.message || 'Lookup failed' },
+                TXT: results[3].status === 'fulfilled' ? results[3].value : { error: results[3].reason?.message || 'Lookup failed' },
+                NS: results[4].status === 'fulfilled' ? results[4].value : { error: results[4].reason?.message || 'Lookup failed' },
+                CNAME: results[5].status === 'fulfilled' ? results[5].value : { error: results[5].reason?.message || 'Lookup failed' },
+                SOA: results[6].status === 'fulfilled' ? results[6].value : { error: results[6].reason?.message || 'Lookup failed' },
+            };
+            // Entferne leere Arrays oder Fehlerobjekte, wenn keine Daten vorhanden sind
+            records = Object.fromEntries(Object.entries(records).filter(([_, v]) => (Array.isArray(v) && v.length > 0) || (typeof v === 'object' && v !== null && !Array.isArray(v) && !v.error)));
+
         } else {
             records = await dns.resolve(domain, type);
         }
@@ -638,13 +751,17 @@ app.get('/api/dns-lookup', async (req, res) => {
         res.json({ success: true, domain, type, records });
 
     } catch (error) {
+        // Dieser Catch-Block wird nur für den spezifischen Typ-Lookup oder bei Fehlern in Promise.allSettled erreicht
         logger.error({ requestIp, domain, type, error: error.message, code: error.code }, 'DNS lookup failed');
+        Sentry.captureException(error, { extra: { requestIp, domain, type } }); // An Sentry senden
+        // Sende 500, aber mit Fehlerdetails im Body
         res.status(500).json({ success: false, error: `DNS lookup failed: ${error.message} (Code: ${error.code})` });
+        // next(error); // Optional: Fehler auch an Sentry Error Handler weiterleiten
     }
 });
 
 // WHOIS Lookup Endpunkt
-app.get('/api/whois-lookup', async (req, res) => {
+app.get('/api/whois-lookup', async (req, res, next) => { // next hinzugefügt
     const queryRaw = req.query.query;
     const query = typeof queryRaw === 'string' ? queryRaw.trim() : queryRaw;
     const requestIp = req.ip || req.socket.remoteAddress;
@@ -657,16 +774,19 @@ app.get('/api/whois-lookup', async (req, res) => {
     }
 
     try {
-        const result = await whois(query, { timeout: 10000 });
+        const result = await whois(query, { timeout: 10000 }); // Timeout hinzugefügt
         logger.info({ requestIp, query }, 'WHOIS lookup successful');
         res.json({ success: true, query, result });
 
     } catch (error) {
         logger.error({ requestIp, query, error: error.message }, 'WHOIS lookup failed');
+        Sentry.captureException(error, { extra: { requestIp, query } }); // An Sentry senden
         let errorMessage = error.message;
         if (error.message.includes('ETIMEDOUT') || error.message.includes('ESOCKETTIMEDOUT')) errorMessage = 'WHOIS server timed out.';
         else if (error.message.includes('ENOTFOUND')) errorMessage = 'Domain or IP not found or WHOIS server unavailable.';
+        // Sende 500, aber mit Fehlerdetails im Body
         res.status(500).json({ success: false, error: `WHOIS lookup failed: ${errorMessage}` });
+        // next(error); // Optional: Fehler auch an Sentry Error Handler weiterleiten
     }
 });
 
@@ -680,9 +800,35 @@ app.get('/api/version', (req, res) => {
 });
 
 
+// --- Sentry Error Handler (NACH ALLEN ROUTEN, VOR ANDEREN ERROR HANDLERN) ---
+// Wichtig: Der Error Handler muss 4 Argumente haben, damit Express ihn als Error Handler erkennt.
+app.use(Sentry.Handlers.errorHandler({
+    shouldHandleError(error) {
+      // Hier können Sie entscheiden, ob ein Fehler an Sentry gesendet werden soll
+      // z.B. keine 404-Fehler senden
+      if (error.status === 404) {
+        return false;
+      }
+      return true;
+    },
+}));
+// --- Ende Sentry Error Handler ---
+
+// Optional: Ein generischer Fallback-Error-Handler nach Sentry
+app.use((err, req, res, next) => {
+    // Dieser Handler wird nur aufgerufen, wenn Sentry den Fehler nicht behandelt hat
+    // oder wenn Sie `next(err)` im Sentry-Handler aufrufen.
+    logger.error({ error: err.message, stack: err.stack, url: req.originalUrl }, 'Unhandled error caught by fallback handler');
+    res.statusCode = err.status || 500;
+    res.end(res.sentry + "\n" + (err.message || 'Internal Server Error') + "\n"); // res.sentry wird vom Sentry Handler gesetzt
+});
+
+
 // --- Server starten ---
+let server; // Variable für den HTTP-Server
+
 initialize().then(() => {
-    app.listen(PORT, () => {
+    server = app.listen(PORT, () => { // Server-Instanz speichern
         logger.info({ port: PORT, node_env: process.env.NODE_ENV || 'development' }, `Server listening`);
         logger.info(`API endpoints available at:`);
         logger.info(`  http://localhost:${PORT}/api/ipinfo`);
@@ -696,14 +842,45 @@ initialize().then(() => {
     });
 }).catch(error => {
     logger.fatal("Server could not start due to initialization errors.");
+    Sentry.captureException(error); // Fehler beim Starten an Sentry senden
     process.exit(1);
 });
 
 // Graceful Shutdown Handling
 const signals = { 'SIGINT': 2, 'SIGTERM': 15 };
-Object.keys(signals).forEach((signal) => {
-  process.on(signal, () => {
+
+async function gracefulShutdown(signal) {
     logger.info(`Received ${signal}, shutting down gracefully...`);
-    process.exit(128 + signals[signal]);
-  });
+    if (server) {
+        server.close(() => {
+            logger.info('HTTP server closed.');
+            // Sentry schließen, um sicherzustellen, dass alle Events gesendet werden
+            Sentry.close(2000).then(() => { // Timeout von 2 Sekunden
+                logger.info('Sentry closed.');
+                process.exit(128 + signals[signal]);
+            }).catch(e => {
+                 logger.error({ error: e.message }, 'Error closing Sentry');
+                 process.exit(1); // Trotzdem beenden
+            });
+        });
+    } else {
+        // Wenn der Server nie gestartet ist, Sentry trotzdem schließen
+        Sentry.close(2000).then(() => {
+            logger.info('Sentry closed (server never started).');
+            process.exit(128 + signals[signal]);
+        }).catch(e => {
+             logger.error({ error: e.message }, 'Error closing Sentry (server never started)');
+             process.exit(1);
+        });
+    }
+
+    // Fallback-Timeout, falls das Schließen hängt
+    setTimeout(() => {
+        logger.warn('Graceful shutdown timed out, forcing exit.');
+        process.exit(1);
+    }, 5000); // 5 Sekunden Timeout
+}
+
+Object.keys(signals).forEach((signal) => {
+  process.on(signal, () => gracefulShutdown(signal));
 });
