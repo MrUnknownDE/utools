@@ -9,16 +9,13 @@ const Sentry = require("@sentry/node");
 Sentry.init({
   // DSN should now be available from process.env if set in .env
   // Using a syntactically valid but fake DSN as default
-  dsn: process.env.SENTRY_DSN || "https://7ea70caba68f548fb96482a573006a7b@o447623.ingest.us.sentry.io/4509062020333568",
-  // Remove explicit integrations for now, rely on defaults
-  // integrations: [], // Let Sentry add defaults like Http, Express automatically
-  // Performance Monitoring - Keep enabled
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-  // Profiling disabled for now to simplify
-  // profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
-  environment: process.env.NODE_ENV || 'development',
-  release: process.env.GIT_COMMIT_SHA || undefined,
+  dsn: process.env.SENTRY_DSN || "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@oooooooooooooooo.ingest.sentry.io/123456",
+  // Minimal configuration for debugging
+  // tracesSampleRate: 1.0, // Keep tracing enabled if needed later
 });
+
+// DEBUG: Check Sentry object after init
+console.log("Sentry object after init:", typeof Sentry, Sentry ? Object.keys(Sentry) : 'Sentry is undefined/null');
 // --- Ende Sentry Initialisierung ---
 
 
@@ -47,16 +44,28 @@ const logger = pino({
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// DEBUG: Check Sentry.Handlers before use
+console.log("Sentry.Handlers before use:", typeof Sentry.Handlers, Sentry.Handlers ? Object.keys(Sentry.Handlers) : 'Sentry.Handlers is undefined/null');
+
 // --- Sentry Request Handler (AS FIRST MIDDLEWARE!) ---
 // This handler must be the first middleware on the app.
 // It needs to be called AFTER Sentry.init()
-app.use(Sentry.Handlers.requestHandler());
+if (Sentry.Handlers && Sentry.Handlers.requestHandler) {
+    app.use(Sentry.Handlers.requestHandler());
+} else {
+    console.error("Sentry.Handlers.requestHandler is not available!");
+    // Optional: process.exit(1); // Exit if Sentry handler is crucial
+}
 // --- Ende Sentry Request Handler ---
 
 // --- Sentry Tracing Handler (AFTER requestHandler, BEFORE routes) ---
 // This handler must be after requestHandler and before any routes.
 // It adds tracing information to incoming requests.
-app.use(Sentry.Handlers.tracingHandler());
+if (Sentry.Handlers && Sentry.Handlers.tracingHandler) {
+    app.use(Sentry.Handlers.tracingHandler());
+} else {
+    console.error("Sentry.Handlers.tracingHandler is not available!");
+}
 // --- Ende Sentry Tracing Handler ---
 
 
@@ -804,16 +813,21 @@ app.get('/api/version', (req, res) => {
 
 // --- Sentry Error Handler (NACH ALLEN ROUTEN, VOR ANDEREN ERROR HANDLERN) ---
 // Wichtig: Der Error Handler muss 4 Argumente haben, damit Express ihn als Error Handler erkennt.
-app.use(Sentry.Handlers.errorHandler({
-    shouldHandleError(error) {
-      // Hier können Sie entscheiden, ob ein Fehler an Sentry gesendet werden soll
-      // z.B. keine 404-Fehler senden
-      if (error.status === 404) {
-        return false;
-      }
-      return true;
-    },
-}));
+// Er muss NACH allen anderen Middlewares und Routen stehen.
+if (Sentry.Handlers && Sentry.Handlers.errorHandler) {
+    app.use(Sentry.Handlers.errorHandler({
+        shouldHandleError(error) {
+          // Hier können Sie entscheiden, ob ein Fehler an Sentry gesendet werden soll
+          // z.B. keine 404-Fehler senden
+          if (error.status === 404) {
+            return false;
+          }
+          return true;
+        },
+    }));
+} else {
+    console.error("Sentry.Handlers.errorHandler is not available!");
+}
 // --- Ende Sentry Error Handler ---
 
 // Optional: Ein generischer Fallback-Error-Handler nach Sentry
