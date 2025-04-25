@@ -8,7 +8,7 @@ A modern web application that displays detailed information about a client's IP 
 <!-- Optional: Füge hier einen Screenshot hinzu -->
 <!-- ![Screenshot](link/to/your/screenshot.png) -->
 
-### Livedemo: https://utools.johanneskr.de
+### Preview: https://utools.mrunk.de
 
 ## 🚀 Features
 
