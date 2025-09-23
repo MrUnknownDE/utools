@@ -8,6 +8,7 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # DIESER BLOCK IST ENTSCHEIDEND - er wird aber von den Repo-Settings überschrieben, wenn diese zu restriktiv sind.
     permissions:
       contents: read
       packages: write # Notwendig, um in die GHCR zu pushen
@@ -16,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Notwendig, um den Git-Hash zu bekommen
+          fetch-depth: 0 
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -42,7 +43,7 @@ jobs:
       - name: Build images using compose.build.yml
         env:
           GIT_COMMIT_SHA: ${{ steps.git_sha.outputs.sha }}
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }} # Sentry DSN als Secret übergeben
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
           docker compose -f compose.build.yml build
 
