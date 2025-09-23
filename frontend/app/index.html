@@ -217,6 +217,7 @@
                      <div class="mt-4 space-x-2">
                          <button id="lookup-ping-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded text-sm transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed" disabled>Ping this IP</button>
                          <button id="lookup-trace-button" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-1 px-3 rounded text-sm transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed" disabled>Trace this IP</button>
+                         <button id="lookup-scan-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed" disabled>Scan Ports</button>
                      </div>
                      <!-- Bereich für Ping-Ergebnisse (Lookup) -->
                      <div id="lookup-ping-results" class="mt-2 text-sm hidden">
@@ -237,6 +238,16 @@
                  <span id="traceroute-message" class="text-gray-400"></span>
              </div>
              <div id="traceroute-output"><pre></pre></div>
+        </div>
+
+        <!-- Bereich für Port Scan -->
+        <div id="port-scan-section" class="mt-8 p-4 bg-gray-700 rounded hidden">
+             <h2 class="text-xl font-semibold text-purple-300 border-b border-purple-500 pb-1 mb-4">Port Scan Results</h2>
+             <div id="port-scan-status" class="flex items-center mb-2">
+                 <div id="port-scan-loader" class="loader mr-2 hidden"></div>
+                 <span id="port-scan-message" class="text-gray-400"></span>
+             </div>
+             <div id="port-scan-output" class="text-sm font-mono"></div>
         </div>
 
         <!-- Globaler Fehlerbereich -->

@@ -1,3 +1,4 @@
+// backend/server.js
 // server.js
 // Load .env variables FIRST!
 require('dotenv').config();
@@ -33,6 +34,7 @@ const lookupRoutes = require('./routes/lookup');
 const dnsLookupRoutes = require('./routes/dnsLookup');
 const whoisLookupRoutes = require('./routes/whoisLookup');
 const versionRoutes = require('./routes/version');
+const portScanRoutes = require('./routes/portScan');
 
 // --- Logger Initialisierung ---
 const logger = pino({
@@ -94,6 +96,7 @@ app.use('/api/traceroute', generalLimiter);
 app.use('/api/lookup', generalLimiter);
 app.use('/api/dns-lookup', generalLimiter);
 app.use('/api/whois-lookup', generalLimiter);
+app.use('/api/port-scan', generalLimiter);
 
 
 // --- API Routes ---
@@ -105,6 +108,7 @@ app.use('/api/lookup', lookupRoutes);
 app.use('/api/dns-lookup', dnsLookupRoutes);
 app.use('/api/whois-lookup', whoisLookupRoutes);
 app.use('/api/version', versionRoutes);
+app.use('/api/port-scan', portScanRoutes);
 
 
 // --- Sentry Error Handler ---

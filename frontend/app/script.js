@@ -67,6 +67,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const tracerouteLoader = document.getElementById('traceroute-loader');
     const tracerouteMessage = document.getElementById('traceroute-message');
 
+    // --- DOM Elements (Port Scan) ---
+    const portScanSection = document.getElementById('port-scan-section');
+    const portScanOutputEl = document.getElementById('port-scan-output');
+    const portScanLoader = document.getElementById('port-scan-loader');
+    const portScanMessage = document.getElementById('port-scan-message');
+    const lookupScanButton = document.getElementById('lookup-scan-button');
+
     // --- DOM Elements (Footer) ---
     const commitShaEl = document.getElementById('commit-sha');
 
@@ -79,6 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentIp = null; // Store the user's fetched IP
     let currentLookupIp = null; // Store the last successfully looked-up IP
     let eventSource = null; // Store the EventSource instance for traceroute
+    let portScanEventSource = null; // Store the EventSource for port scan
 
     // --- Helper Functions ---
 
@@ -361,6 +369,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (lookupPingLoader) lookupPingLoader.classList.add('hidden');
         if (lookupPingOutputEl) lookupPingOutputEl.textContent = '';
         if (lookupPingErrorEl) lookupPingErrorEl.textContent = '';
+        if (portScanSection) portScanSection.classList.add('hidden'); // Hide port scan results
+        if (portScanOutputEl) portScanOutputEl.innerHTML = '';
         hideLookupStatus(); // Hide status on reset
 
         const fieldsToClear = [
@@ -373,12 +383,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (lookupPingButton) lookupPingButton.disabled = true;
         if (lookupTraceButton) lookupTraceButton.disabled = true;
+        if (lookupScanButton) lookupScanButton.disabled = true;
         currentLookupIp = null;
 
         // Remove lookup map instance if it exists
         if (window['lookup-map_instance']) {
             window['lookup-map_instance'].remove();
             window['lookup-map_instance'] = null;
+        }
+
+        if (portScanEventSource) {
+            portScanEventSource.close();
+            portScanEventSource = null;
         }
      }
 
@@ -422,6 +438,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (lookupPingButton) lookupPingButton.disabled = false;
             if (lookupTraceButton) lookupTraceButton.disabled = false;
+            if (lookupScanButton) lookupScanButton.disabled = false;
 
         } catch (error) {
             console.error(`Failed to fetch lookup info for ${ipToLookup}:`, error);
@@ -653,6 +670,91 @@ document.addEventListener('DOMContentLoaded', () => {
         tracerouteOutputEl.scrollTop = tracerouteOutputEl.scrollHeight;
     }
 
+    // --- Port Scan Functions ---
+    function startPortScan(ip) {
+        if (!ip) {
+            showGlobalError('Cannot start port scan: IP address is missing.');
+            return;
+        }
+        if (!portScanSection || !portScanOutputEl || !portScanLoader || !portScanMessage) return;
+
+        if (portScanEventSource) {
+            portScanEventSource.close();
+        }
+
+        portScanSection.classList.remove('hidden');
+        portScanOutputEl.innerHTML = '';
+        portScanLoader.classList.remove('hidden');
+        portScanMessage.textContent = `Starting port scan for ${ip}...`;
+        hideGlobalError();
+        hideLookupError();
+
+        const url = `${API_BASE_URL}/port-scan?targetIp=${encodeURIComponent(ip)}`;
+        portScanEventSource = new EventSource(url);
+
+        portScanEventSource.onopen = () => {
+            console.log('SSE connection opened for port scan.');
+        };
+
+        portScanEventSource.onerror = (event) => {
+            console.error('Port Scan EventSource failed:', event);
+            portScanMessage.textContent = 'Connection error during port scan.';
+            portScanLoader.classList.add('hidden');
+            portScanEventSource.close();
+        };
+
+        portScanEventSource.addEventListener('info', (event) => {
+            const infoData = JSON.parse(event.data);
+            portScanMessage.textContent = infoData.message;
+        });
+
+        portScanEventSource.addEventListener('port_status', (event) => {
+            const portData = JSON.parse(event.data);
+            displayPortScanResult(portData);
+        });
+
+        portScanEventSource.addEventListener('error', (event) => {
+            const errorData = JSON.parse(event.data);
+            displayPortScanResult({ error: errorData.error });
+        });
+
+        portScanEventSource.addEventListener('end', (event) => {
+            const endData = JSON.parse(event.data);
+            portScanMessage.textContent = endData.message;
+            portScanLoader.classList.add('hidden');
+            portScanEventSource.close();
+        });
+    }
+
+    function displayPortScanResult(data) {
+        if (!portScanOutputEl) return;
+        const lineDiv = document.createElement('div');
+        lineDiv.classList.add('mb-1');
+
+        let statusColor = 'text-gray-400';
+        let statusText = data.status.toUpperCase();
+        if (data.status === 'open') {
+            statusColor = 'text-green-400';
+            statusText = 'OPEN';
+        } else if (data.status === 'closed') {
+            statusColor = 'text-red-400';
+            statusText = 'CLOSED';
+        } else if (data.status === 'timeout') {
+            statusColor = 'text-yellow-400';
+            statusText = 'TIMEOUT (Filtered?)';
+        }
+
+        if (data.error) {
+            lineDiv.innerHTML = `<span class="text-red-400">Error: ${data.error}</span>`;
+        } else {
+            lineDiv.innerHTML = `Port <span class="font-bold w-12 inline-block">${data.port}</span> <span class="w-24 inline-block">(${data.service})</span>: <span class="font-bold ${statusColor}">${statusText}</span>`;
+        }
+
+        portScanOutputEl.appendChild(lineDiv);
+        portScanOutputEl.scrollTop = portScanOutputEl.scrollHeight;
+    }
+
+
     // --- Event Handlers ---
     function handleIpClick(event) {
         event.preventDefault(); // Verhindert das Standardverhalten des Links (#)
@@ -718,6 +820,13 @@ document.addEventListener('DOMContentLoaded', () => {
          }
      }
 
+     function handleLookupScanClick() {
+        if (currentLookupIp) {
+            console.log(`Starting port scan for looked-up IP: ${currentLookupIp}`);
+            startPortScan(currentLookupIp);
+        }
+     }
+
     // --- Initial Load & Event Listeners ---
     fetchIpInfo(); // Lade Infos zur eigenen IP
     fetchVersionInfo(); // Lade Versionsinfo für Footer
@@ -729,6 +838,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (lookupPingButton) lookupPingButton.addEventListener('click', handleLookupPingClick);
     if (lookupTraceButton) lookupTraceButton.addEventListener('click', handleLookupTraceClick);
+    if (lookupScanButton) lookupScanButton.addEventListener('click', handleLookupScanClick);
 
     // Der Event Listener für den IP-Link wird jetzt in fetchIpInfo() hinzugefügt,
     // nachdem die IP erfolgreich abgerufen wurde.

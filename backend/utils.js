@@ -1,4 +1,3 @@
-// backend/utils.js
 const net = require('net'); // Node.js built-in module for IP validation
 const { spawn } = require('child_process');
 const pino = require('pino'); // Import pino for logging within utils if needed
@@ -256,6 +255,48 @@ function parseTracerouteLine(line) {
     return null;
 }
 
+/**
+ * Checks if a specific TCP port is open on a given host.
+ * @param {number} port - The port to check.
+ * @param {string} host - The target host IP address.
+ * @param {number} timeout - Connection timeout in milliseconds.
+ * @returns {Promise<{port: number, status: 'open'|'closed'|'timeout', service: string}>} A promise that resolves with the port status.
+ */
+function checkPort(port, host, timeout = 2000) {
+    // A small map of common ports to their services
+    const commonPorts = {
+        21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP',
+        110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 445: 'SMB', 993: 'IMAPS',
+        995: 'POP3S', 1433: 'MSSQL', 1521: 'Oracle', 3306: 'MySQL', 3389: 'RDP',
+        5432: 'PostgreSQL', 5900: 'VNC', 8080: 'HTTP-Alt', 8443: 'HTTPS-Alt'
+    };
+    const service = commonPorts[port] || 'Unknown';
+
+    return new Promise((resolve) => {
+        const socket = new net.Socket();
+        socket.setTimeout(timeout);
+
+        socket.on('connect', () => {
+            socket.destroy();
+            resolve({ port, status: 'open', service });
+        });
+
+        socket.on('timeout', () => {
+            socket.destroy();
+            resolve({ port, status: 'timeout', service });
+        });
+
+        socket.on('error', (err) => {
+            socket.destroy();
+            // 'ECONNREFUSED' is the key for a closed port. Other errors might be network issues.
+            const status = err.code === 'ECONNREFUSED' ? 'closed' : 'error';
+            resolve({ port, status, service, error: err.code });
+        });
+
+        socket.connect(port, host);
+    });
+}
+
 
 module.exports = {
     isValidIp,
@@ -265,5 +306,5 @@ module.exports = {
     executeCommand,
     parsePingOutput,
     parseTracerouteLine,
-    // Note: logger is not exported, assuming it's managed globally or passed where needed
+    checkPort,
 };
