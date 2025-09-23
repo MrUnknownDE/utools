@@ -32,11 +32,12 @@ jobs:
         id: git_sha
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Define Image Names
+      - name: Define Image Names in Lowercase
         id: image_names
         run: |
-          echo "backend_image=ghcr.io/${{ github.repository_owner }}/utools-backend" >> $GITHUB_OUTPUT
-          echo "frontend_image=ghcr.io/${{ github.repository_owner }}/utools-frontend" >> $GITHUB_OUTPUT
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "backend_image=ghcr.io/$OWNER_LC/utools-backend" >> $GITHUB_OUTPUT
+          echo "frontend_image=ghcr.io/$OWNER_LC/utools-frontend" >> $GITHUB_OUTPUT
 
       - name: Build images using compose.build.yml
         env:
