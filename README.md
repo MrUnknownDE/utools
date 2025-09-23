@@ -58,57 +58,56 @@ You can run this application easily using Docker and Docker Compose.
 
 This method uses the Docker images automatically built and pushed to GitHub Container Registry (GHCR) by the GitHub Actions workflow.
 
-1.  **Create `docker-compose.yml`:**
-    Save the following content as `docker-compose.yml` in a new directory on your machine:
+1.  **Create `compose.yml`:**
+    Save the following content as `compose.yml` in a new directory on your machine:
 
     ```yaml
-    version: '3.8'
-
     services:
+      # Backend Service (Node.js App)
       backend:
-        # Use the pre-built image from GHCR
-        image: ghcr.io/mrunknownde/utools-backend:latest # Or specify a specific tag/sha
+        # Verwendet ein bereits gebautes Image
+        image: ghcr.io/mrunknownde/utools-backend:latest
         container_name: utools_backend
         restart: unless-stopped
         environment:
-          # Production environment settings
-          NODE_ENV: production
-          PORT: 3000
-          LOG_LEVEL: info # Adjust log level if needed (e.g., 'debug', 'warn')
+          # Setze Umgebungsvariablen für das Backend
+          NODE_ENV: production # Wichtig für Performance und Logging
+          PORT: 3000 # Port innerhalb des Containers
+          LOG_LEVEL: info # Oder 'warn' für weniger Logs in Produktion
           PING_COUNT: 4
-          # Optional: Set Sentry DSN for error tracking if you use Sentry
-          # SENTRY_DSN: "YOUR_SENTRY_DSN"
+          # Sentry DSN aus der Umgebung/ .env Datei übernehmen
+          SENTRY_DSN: "https://7ea70caba68f548fb96482a573006a7b@o447623.ingest.us.sentry.io/4509062020333568" # Wichtig für die Laufzeit
         dns:
-          # Explicitly set reliable public DNS servers for rDNS lookups inside the container
           - 1.1.1.1    # Cloudflare DNS
           - 1.0.0.1    # Cloudflare DNS
           - 8.8.8.8    # Google DNS
           - 8.8.4.4    # Google DNS
         networks:
-          - utools_network
-        # Note: No ports exposed directly, access is via frontend proxy
+          - utools_network # Verbinde mit unserem benutzerdefinierten Netzwerk
 
+      # Frontend Service (Nginx)
       frontend:
-        # Use the pre-built image from GHCR
-        image: ghcr.io/mrunknownde/utools-frontend:latest # Or specify a specific tag/sha
+        # Verwendet ein bereits gebautes Image
+        image: ghcr.io/mrunknownde/utools-frontend:latest
         container_name: utools_frontend
         restart: unless-stopped
         ports:
-          # Expose port 8080 on the host, mapping to port 80 in the container (Nginx)
+          # Mappe Port 8080 vom Host auf Port 80 im Container (wo Nginx lauscht)
+          # Zugriff von außen (Browser) erfolgt über localhost:8080
           - "8080:80"
         depends_on:
-          - backend # Ensures backend service is started first
+          - backend # Stellt sicher, dass Backend gestartet wird (aber nicht unbedingt bereit ist)
         networks:
-          - utools_network
+          - utools_network # Verbinde mit unserem benutzerdefinierten Netzwerk
 
+    # Definiere ein benutzerdefiniertes Netzwerk (gute Praxis)
     networks:
       utools_network:
         driver: bridge
-        name: utools_network # Give the network a specific name
     ```
 
 2.  **Start the Application:**
-    Open a terminal in the directory where you saved the `docker-compose.yml` file and run:
+    Open a terminal in the directory where you saved the `compose.yml` file and run:
     ```bash
     docker compose up -d
     ```
@@ -120,7 +119,7 @@ This method uses the Docker images automatically built and pushed to GitHub Cont
 
 ### Option 2: Building Images from Source
 
-If you want to modify the code or build the images yourself:
+If you want to modify the code or build the images yourself, the project is now split into a build and a run configuration.
 
 1.  **Clone the Repository:**
     ```bash
@@ -128,20 +127,26 @@ If you want to modify the code or build the images yourself:
     cd utools
     ```
 2.  **Build and Start:**
-    Use Docker Compose to build the images based on the `Dockerfile`s in the `backend` and `frontend` directories and then start the containers:
+    First, you build the images using `compose.build.yml`. Then, you start the services using the main `compose.yml`.
+
     ```bash
-    # Optional: Set GIT_COMMIT_SHA for build args if needed
-    # export GIT_COMMIT_SHA=$(git rev-parse --short HEAD)
-    docker compose -f compose.yml up -d --build
+    # Set GIT_COMMIT_SHA for the build process
+    export GIT_COMMIT_SHA=$(git rev-parse --short HEAD)
+
+    # 1. Build the images
+    docker compose -f compose.build.yml build
+
+    # 2. Run the services using the newly built images
+    docker compose -f compose.yml up -d
     ```
-    *(Note: Use `docker-compose` (with hyphen) if you have an older version. The `compose.yml` in the repository correctly uses `build:` directives)*
+    You can also use the provided `build.sh` script which does these steps for you.
 
 3.  **Access the Webapp:**
     Open your web browser and navigate to `http://localhost:8080`.
 
 ## ⚙️ Configuration
 
-The application is configured mainly through environment variables set in the `docker-compose.yml` file for the `backend` service:
+The application is configured mainly through environment variables set in the `compose.yml` file for the `backend` service:
 
 *   `NODE_ENV`: Set to `production` for optimal performance and JSON logging.
 *   `PORT`: The internal port the Node.js application listens on (default: `3000`).

@@ -1,0 +1,18 @@
+# compose.build.yml
+services:
+  backend:
+    # Definiert, wie das Image gebaut wird
+    build:
+      context: ./backend
+      args:
+        - GIT_COMMIT_SHA=${GIT_COMMIT_SHA:-unknown}
+        - SENTRY_DSN=${SENTRY_DSN:-}
+    # Legt den Namen für das gebaute Image fest
+    image: ghcr.io/mrunknownde/utools-backend:latest
+
+  frontend:
+    # Definiert, wie das Image gebaut wird
+    build:
+      context: ./frontend
+    # Legt den Namen für das gebaute Image fest
+    image: ghcr.io/mrunknownde/utools-frontend:latest
