@@ -1,4 +1,3 @@
-// backend/routes/traceroute.js
 const express = require('express');
 const Sentry = require("@sentry/node");
 const { spawn } = require('child_process');
@@ -37,13 +36,6 @@ router.get('/', (req, res) => {
         return res.status(403).json({ success: false, error: 'Operations on private or local IP addresses are not allowed.' });
     }
 
-    // Add specific context for this request to the current Sentry scope
-    // Errors/Messages captured later in this request handler will have this context.
-    Sentry.configureScope(scope => {
-        scope.setContext("traceroute_details", { targetIp: targetIp, requestIp: requestIp });
-    });
-
-
     try {
         logger.info({ requestIp, targetIp }, `Starting traceroute stream...`);
         res.setHeader('Content-Type', 'text/event-stream');
@@ -77,7 +69,6 @@ router.get('/', (req, res) => {
                 Sentry.captureException(e, { level: 'warning', extra: { requestIp, targetIp, event } });
                 if (proc && !proc.killed) proc.kill();
                 if (!res.writableEnded) res.end();
-                // No manual transaction finishing needed here
             }
         };
 
@@ -88,10 +79,8 @@ router.get('/', (req, res) => {
             lines.forEach(line => {
                 const parsed = parseTracerouteLine(line);
                 if (parsed) {
-                    // logger.debug({ requestIp, targetIp, hop: parsed.hop, ip: parsed.ip }, 'Sending hop data');
                     sendEvent('hop', parsed);
                 } else if (line.trim()) {
-                     // logger.debug({ requestIp, targetIp, message: line.trim() }, 'Sending info data');
                      sendEvent('info', { message: line.trim() });
                 }
             });
@@ -110,7 +99,6 @@ router.get('/', (req, res) => {
             Sentry.captureException(err, { extra: { requestIp, targetIp } }); // Capture original error
             sendEvent('error', { error: `Failed to start traceroute: ${errorMsg}` });
             if (!res.writableEnded) res.end();
-            // No manual transaction finishing needed here
         });
 
         proc.on('close', (code) => {
@@ -125,30 +113,23 @@ router.get('/', (req, res) => {
                 logger.error({ requestIp, targetIp, exitCode: code }, errorMsg);
                 Sentry.captureMessage('Traceroute command failed', { level: 'error', extra: { requestIp, targetIp, exitCode: code } });
                 sendEvent('error', { error: errorMsg });
-                // Transaction status will be inferred by Sentry based on errors captured
             } else {
                 logger.info({ requestIp, targetIp }, `Traceroute stream completed successfully.`);
-                // Transaction status will likely be 'ok' if no errors were captured
             }
              sendEvent('end', { exitCode: code });
              if (!res.writableEnded) res.end();
-             // No manual transaction finishing needed here
         });
 
         req.on('close', () => {
             logger.info({ requestIp, targetIp }, 'Client disconnected from traceroute stream, killing process.');
             if (proc && !proc.killed) proc.kill();
             if (!res.writableEnded) res.end();
-            // Sentry transaction might be marked as 'cancelled' automatically or based on timeout
-            // No manual transaction finishing needed here
         });
 
     } catch (error) {
-        // This catch handles errors during the initial setup (e.g., spawn fails immediately)
         const errorMsg = getErrorMessage(error, 'Failed to initiate traceroute due to an internal server error.');
         logger.error({ requestIp, targetIp, error: errorMsg, stack: error.stack }, 'Error setting up traceroute stream');
-        Sentry.captureException(error, { extra: { requestIp, targetIp } }); // Capture original error
-        // No manual transaction finishing needed here
+        Sentry.captureException(error, { extra: { requestIp, targetIp } });
 
         if (!res.headersSent) {
              res.status(500).json({ success: false, error: `Failed to initiate traceroute: ${errorMsg}` });

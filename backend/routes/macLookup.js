@@ -1,9 +1,8 @@
-// backend/routes/macLookup.js
 const express = require('express');
 const Sentry = require("@sentry/node");
 const macaddress = require('macaddress');
 const pino = require('pino');
-const { isValidMacAddress } = require('../utils'); // Wir fügen diese neue Funktion hinzu
+const { isValidMacAddress } = require('../utils');
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 const router = express.Router();
@@ -21,7 +20,16 @@ router.get('/', async (req, res) => {
     }
 
     try {
-        const vendor = await macaddress.lookup(mac);
+        // Wrap the callback-based function in a Promise to use it with async/await
+        const vendor = await new Promise((resolve, reject) => {
+            macaddress.lookup(mac, (err, vendorString) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(vendorString);
+            });
+        });
+
         if (vendor) {
             logger.info({ requestIp, mac, vendor }, 'MAC lookup successful');
             res.json({ success: true, mac, vendor });

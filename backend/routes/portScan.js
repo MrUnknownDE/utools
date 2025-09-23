@@ -1,4 +1,3 @@
-// backend/routes/portScan.js
 const express = require('express');
 const Sentry = require("@sentry/node");
 const pino = require('pino');
@@ -26,10 +25,6 @@ router.get('/', (req, res) => {
         logger.warn({ requestIp, targetIp }, 'Attempt to scan private IP blocked');
         return res.status(403).json({ success: false, error: 'Operations on private or local IP addresses are not allowed.' });
     }
-
-    Sentry.configureScope(scope => {
-        scope.setContext("port_scan_details", { targetIp, requestIp });
-    });
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -65,7 +60,8 @@ router.get('/', (req, res) => {
             }
         } catch (error) {
             logger.error({ requestIp, targetIp, error: error.message }, 'Error during port scan stream');
-            Sentry.captureException(error);
+            // Add context directly to the captureException call
+            Sentry.captureException(error, { extra: { requestIp, targetIp } });
             if (!isConnectionClosed) {
                 sendEvent('error', { error: 'An unexpected error occurred during the scan.' });
             }
