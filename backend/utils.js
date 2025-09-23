@@ -1,3 +1,4 @@
+// backend/utils.js
 const net = require('net'); // Node.js built-in module for IP validation
 const { spawn } = require('child_process');
 const pino = require('pino'); // Import pino for logging within utils if needed
@@ -63,6 +64,20 @@ function isValidDomain(domain) {
     // Regex updated to be more robust and handle international characters (IDNs)
     const domainRegex = /^(?:[a-z0-9\p{L}](?:[a-z0-9\p{L}-]{0,61}[a-z0-9\p{L}])?\.)+[a-z0-9\p{L}][a-z0-9\p{L}-]{0,61}[a-z0-9\p{L}]$/iu;
     return domainRegex.test(domain.trim());
+}
+
+/**
+ * Validiert eine MAC-Adresse.
+ * @param {string} mac - Die zu validierende MAC-Adresse.
+ * @returns {boolean} True, wenn das Format gültig ist, sonst false.
+ */
+function isValidMacAddress(mac) {
+    if (!mac || typeof mac !== 'string') {
+        return false;
+    }
+    // This regex matches common MAC address formats (e.g., 00:1A:2B:3C:4D:5E, 00-1A-2B-3C-4D-5E, 001A2B3C4D5E)
+    const macRegex = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^([0-9A-Fa-f]{12})$/;
+    return macRegex.test(mac.trim());
 }
 
 
@@ -302,6 +317,7 @@ module.exports = {
     isValidIp,
     isPrivateIp,
     isValidDomain,
+    isValidMacAddress,
     getCleanIp,
     executeCommand,
     parsePingOutput,
