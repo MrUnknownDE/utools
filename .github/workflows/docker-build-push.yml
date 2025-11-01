@@ -1,4 +1,3 @@
-# .github/workflows/dockerhub-build-and-push.yml
 name: Docker Build and Push (Docker Hub, Multi-Arch)
 
 on:
@@ -39,7 +38,6 @@ jobs:
         id: git_sha
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      # Namespace für Docker Hub (alles lowercase)
       - name: Define Docker Hub image names
         id: image_names
         run: |
@@ -47,9 +45,6 @@ jobs:
           echo "backend_image=docker.io/$NS_LC/utools-backend" >> $GITHUB_OUTPUT
           echo "frontend_image=docker.io/$NS_LC/utools-frontend" >> $GITHUB_OUTPUT
 
-      # Multi-Arch Build & Push über Bake mit deiner compose.build.yml
-      # WICHTIG: Die Service-Namen in compose.build.yml sollten "backend" und "frontend" heißen
-      # und unter 'image:' jeweils docker.io/<user>/utools-... gesetzt sein.
       - name: Build & push multi-arch images via Bake (latest + sha)
         uses: docker/bake-action@v5
         with:
@@ -58,8 +53,10 @@ jobs:
           push: true
           set: |
             *.platform=linux/amd64,linux/arm64
-            backend.tags=${{ steps.image_names.outputs.backend_image }}:latest,${{ steps.image_names.outputs.backend_image }}:${{ steps.git_sha.outputs.sha }}
-            frontend.tags=${{ steps.image_names.outputs.frontend_image }}:latest,${{ steps.image_names.outputs.frontend_image }}:${{ steps.git_sha.outputs.sha }}
+            backend.tags=${{ steps.image_names.outputs.backend_image }}:latest
+            backend.tags+=${{ steps.image_names.outputs.backend_image }}:${{ steps.git_sha.outputs.sha }}
+            frontend.tags=${{ steps.image_names.outputs.frontend_image }}:latest
+            frontend.tags+=${{ steps.image_names.outputs.frontend_image }}:${{ steps.git_sha.outputs.sha }}
 
       # Optionaler Zusatz-Tag ohne Rebuild: manifest neu taggen
       - name: Tag backend image with extra tag (manifest)
