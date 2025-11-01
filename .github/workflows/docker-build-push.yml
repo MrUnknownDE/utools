@@ -7,68 +7,80 @@ on:
   workflow_dispatch:
     inputs:
       extra_tag:
-        description: "Optionaler zusätzlicher Tag (z.B. v1.2.3). Wird zusätzlich zu :latest und :<sha> gepusht."
+        description: "Optionaler Zusatz-Tag (z.B. v1.2.3). Kommt zusätzlich zu :latest und :<sha>."
         required: false
         default: ""
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    env:
+      REGISTRY: docker.io
+      DOCKERHUB_USER_LC: ${{ secrets.DOCKERHUB_USERNAME }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Log in to Docker Hub
+      - name: Get short SHA
+        id: vars
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set up QEMU (for multi-arch)
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      - name: Set up Docker Buildx
+      - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Get Git commit SHA
-        id: git_sha
-        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
-      - name: Define Docker Hub image names
-        id: image_names
-        run: |
-          NS_LC=$(echo "${{ secrets.DOCKERHUB_USERNAME }}" | tr '[:upper:]' '[:lower:]')
-          echo "backend_image=docker.io/$NS_LC/utools-backend" >> $GITHUB_OUTPUT
-          echo "frontend_image=docker.io/$NS_LC/utools-frontend" >> $GITHUB_OUTPUT
-
-      - name: Build & push multi-arch images via Bake (latest + sha)
-        uses: docker/bake-action@v5
+      # -------- BACKEND --------
+      - name: Build & Push backend (multi-arch)
+        uses: docker/build-push-action@v6
         with:
-          files: |
-            compose.build.yml
+          context: ./backend
+          file: ./backend/Dockerfile
           push: true
-          set: |
-            *.platform=linux/amd64,linux/arm64
-            backend.tags=${{ steps.image_names.outputs.backend_image }}:latest
-            backend.tags+=${{ steps.image_names.outputs.backend_image }}:${{ steps.git_sha.outputs.sha }}
-            frontend.tags=${{ steps.image_names.outputs.frontend_image }}:latest
-            frontend.tags+=${{ steps.image_names.outputs.frontend_image }}:${{ steps.git_sha.outputs.sha }}
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.DOCKERHUB_USER_LC }}/utools-backend:latest
+            ${{ env.REGISTRY }}/${{ env.DOCKERHUB_USER_LC }}/utools-backend:${{ steps.vars.outputs.sha }}
+          build-args: |
+            GIT_COMMIT_SHA=${{ steps.vars.outputs.sha }}
+            SENTRY_DSN=${{ secrets.SENTRY_DSN }}
 
-      # Optionaler Zusatz-Tag ohne Rebuild: manifest neu taggen
-      - name: Tag backend image with extra tag (manifest)
+      - name: Tag backend with extra_tag (manifest retag)
         if: ${{ github.event.inputs.extra_tag && github.event.inputs.extra_tag != '' }}
         run: |
           docker buildx imagetools create \
-            -t ${{ steps.image_names.outputs.backend_image }}:${{ github.event.inputs.extra_tag }} \
-            ${{ steps.image_names.outputs.backend_image }}:${{ steps.git_sha.outputs.sha }}
+            -t ${{ env.REGISTRY }}/${{ env.DOCKERHUB_USER_LC }}/utools-backend:${{ github.event.inputs.extra_tag }} \
+            ${{ env.REGISTRY }}/${{ env.DOCKERHUB_USER_LC }}/utools-backend:${{ steps.vars.outputs.sha }}
 
-      - name: Tag frontend image with extra tag (manifest)
+      # -------- FRONTEND --------
+      - name: Build & Push frontend (multi-arch)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.DOCKERHUB_USER_LC }}/utools-frontend:latest
+            ${{ env.REGISTRY }}/${{ env.DOCKERHUB_USER_LC }}/utools-frontend:${{ steps.vars.outputs.sha }}
+          build-args: |
+            GIT_COMMIT_SHA=${{ steps.vars.outputs.sha }}
+            SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+
+      - name: Tag frontend with extra_tag (manifest retag)
         if: ${{ github.event.inputs.extra_tag && github.event.inputs.extra_tag != '' }}
         run: |
           docker buildx imagetools create \
-            -t ${{ steps.image_names.outputs.frontend_image }}:${{ github.event.inputs.extra_tag }} \
-            ${{ steps.image_names.outputs.frontend_image }}:${{ steps.git_sha.outputs.sha }}
+            -t ${{ env.REGISTRY }}/${{ env.DOCKERHUB_USER_LC }}/utools-frontend:${{ github.event.inputs.extra_tag }} \
+            ${{ env.REGISTRY }}/${{ env.DOCKERHUB_USER_LC }}/utools-frontend:${{ steps.vars.outputs.sha }}

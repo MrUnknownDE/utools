@@ -7,10 +7,10 @@ services:
       args:
         - GIT_COMMIT_SHA=${GIT_COMMIT_SHA:-unknown}
         - SENTRY_DSN=${SENTRY_DSN:-}
-    image: ghcr.io/mrunknownde/utools-backend:latest
+    image: mrunknownde/utools-backend:latest
 
   frontend:
     # Definiert, wie das Image gebaut wird
     build:
       context: ./frontend
-    image: ghcr.io/mrunknownde/utools-frontend:latest
+    image: mrunknownde/utools-frontend:latest
