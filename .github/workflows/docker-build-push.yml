@@ -1,9 +1,16 @@
-name: Docker Build and Push
+# .github/workflows/dockerhub-build-and-push.yml
+name: Docker Build and Push (Docker Hub, Multi-Arch)
 
 on:
   push:
     branches:
-      - main # Löst den Workflow bei jedem Push auf den main-Branch aus
+      - main
+  workflow_dispatch:
+    inputs:
+      extra_tag:
+        description: "Optionaler zusätzlicher Tag (z.B. v1.2.3). Wird zusätzlich zu :latest und :<sha> gepusht."
+        required: false
+        default: ""
 
 jobs:
   build-and-push:
@@ -13,15 +20,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Notwendig, um den Git-Hash zu bekommen
+          fetch-depth: 0
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          # Verwendet Ihr dediziertes Secret für die Authentifizierung
-          password: ${{ secrets.GHC_PUSH }}
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up QEMU (for multi-arch)
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -30,28 +39,39 @@ jobs:
         id: git_sha
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Define Image Names in Lowercase
+      # Namespace für Docker Hub (alles lowercase)
+      - name: Define Docker Hub image names
         id: image_names
         run: |
-          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "backend_image=ghcr.io/$OWNER_LC/utools-backend" >> $GITHUB_OUTPUT
-          echo "frontend_image=ghcr.io/$OWNER_LC/utools-frontend" >> $GITHUB_OUTPUT
+          NS_LC=$(echo "${{ secrets.DOCKERHUB_USERNAME }}" | tr '[:upper:]' '[:lower:]')
+          echo "backend_image=docker.io/$NS_LC/utools-backend" >> $GITHUB_OUTPUT
+          echo "frontend_image=docker.io/$NS_LC/utools-frontend" >> $GITHUB_OUTPUT
 
-      - name: Build images using compose.build.yml
-        env:
-          GIT_COMMIT_SHA: ${{ steps.git_sha.outputs.sha }}
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }} # Sentry DSN als Secret übergeben
-        run: |
-          docker compose -f compose.build.yml build
+      # Multi-Arch Build & Push über Bake mit deiner compose.build.yml
+      # WICHTIG: Die Service-Namen in compose.build.yml sollten "backend" und "frontend" heißen
+      # und unter 'image:' jeweils docker.io/<user>/utools-... gesetzt sein.
+      - name: Build & push multi-arch images via Bake (latest + sha)
+        uses: docker/bake-action@v5
+        with:
+          files: |
+            compose.build.yml
+          push: true
+          set: |
+            *.platform=linux/amd64,linux/arm64
+            backend.tags=${{ steps.image_names.outputs.backend_image }}:latest,${{ steps.image_names.outputs.backend_image }}:${{ steps.git_sha.outputs.sha }}
+            frontend.tags=${{ steps.image_names.outputs.frontend_image }}:latest,${{ steps.image_names.outputs.frontend_image }}:${{ steps.git_sha.outputs.sha }}
 
-      - name: Tag images with Git SHA
+      # Optionaler Zusatz-Tag ohne Rebuild: manifest neu taggen
+      - name: Tag backend image with extra tag (manifest)
+        if: ${{ github.event.inputs.extra_tag && github.event.inputs.extra_tag != '' }}
         run: |
-          docker tag ${{ steps.image_names.outputs.backend_image }}:latest ${{ steps.image_names.outputs.backend_image }}:${{ steps.git_sha.outputs.sha }}
-          docker tag ${{ steps.image_names.outputs.frontend_image }}:latest ${{ steps.image_names.outputs.frontend_image }}:${{ steps.git_sha.outputs.sha }}
+          docker buildx imagetools create \
+            -t ${{ steps.image_names.outputs.backend_image }}:${{ github.event.inputs.extra_tag }} \
+            ${{ steps.image_names.outputs.backend_image }}:${{ steps.git_sha.outputs.sha }}
 
-      - name: Push images to GHCR (both tags)
+      - name: Tag frontend image with extra tag (manifest)
+        if: ${{ github.event.inputs.extra_tag && github.event.inputs.extra_tag != '' }}
         run: |
-          docker push ${{ steps.image_names.outputs.backend_image }}:latest
-          docker push ${{ steps.image_names.outputs.backend_image }}:${{ steps.git_sha.outputs.sha }}
-          docker push ${{ steps.image_names.outputs.frontend_image }}:latest
-          docker push ${{ steps.image_names.outputs.frontend_image }}:${{ steps.git_sha.outputs.sha }}
+          docker buildx imagetools create \
+            -t ${{ steps.image_names.outputs.frontend_image }}:${{ github.event.inputs.extra_tag }} \
+            ${{ steps.image_names.outputs.frontend_image }}:${{ steps.git_sha.outputs.sha }}

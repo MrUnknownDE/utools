@@ -2,7 +2,7 @@ services:
   # Backend Service (Node.js App)
   backend:
     # Verwendet ein bereits gebautes Image
-    image: ghcr.io/mrunknownde/utools-backend:latest
+    image: mrunknownde/utools-backend
     container_name: utools_backend
     restart: unless-stopped
     environment:
@@ -28,7 +28,7 @@ services:
   # Frontend Service (Nginx)
   frontend:
     # Verwendet ein bereits gebautes Image
-    image: ghcr.io/mrunknownde/utools-frontend:latest
+    image: mrunknownde/utools-frontend
     container_name: utools_frontend
     restart: unless-stopped
     ports:
