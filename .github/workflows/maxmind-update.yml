@@ -3,8 +3,7 @@ name: Update MaxMind GeoLite2 DBs
 on:
   workflow_dispatch: # Ermöglicht manuelles Starten
   schedule:
-    # Läuft jeden Dienstag um 05:00 UTC (anpassbar)
-    - cron: '0 5 * * 2'
+    - cron: '0 0 1 * *'
 
 jobs:
   update-db:
