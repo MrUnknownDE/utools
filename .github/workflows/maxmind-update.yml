@@ -15,11 +15,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          lfs: true # Wichtig: LFS-Dateien beim Checkout herunterladen
 
       - name: Download geoipupdate tool
         run: |
           # Lade eine spezifische Version oder die neueste herunter
-          GEOIPUPDATE_VERSION="4.11.1" # Beispielversion, prüfe auf neuere Releases
+          GEOIPUPDATE_VERSION="4.11.1"
           wget "https://github.com/maxmind/geoipupdate/releases/download/v${GEOIPUPDATE_VERSION}/geoipupdate_${GEOIPUPDATE_VERSION}_linux_amd64.tar.gz"
           tar -zxvf "geoipupdate_${GEOIPUPDATE_VERSION}_linux_amd64.tar.gz"
           # Verschiebe das Binary in einen bekannten Pfad und mache es ausführbar
@@ -30,12 +32,10 @@ jobs:
 
       - name: Create GeoIP.conf
         # Erstellt die Konfigurationsdatei für geoipupdate mit den Secrets
-        # Wichtig: Secrets nicht direkt im Log ausgeben!
         run: |
           echo "Creating GeoIP.conf..."
           cat << EOF > GeoIP.conf
           # GeoIP.conf file for geoipupdate
-          # Replace with your actual AccountID and LicenseKey from GitHub Secrets
           AccountID ${{ secrets.MAXMIND_ACCOUNT_ID }}
           LicenseKey ${{ secrets.MAXMIND_LICENSE_KEY }}
 
@@ -43,7 +43,6 @@ jobs:
           EditionIDs GeoLite2-ASN GeoLite2-City
           EOF
           echo "GeoIP.conf created."
-        # Umgebungsvariablen für Sicherheit (werden nicht geloggt)
         env:
           MAXMIND_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
           MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
@@ -51,42 +50,37 @@ jobs:
       - name: Run geoipupdate
         run: |
           echo "Running geoipupdate..."
-          # -f gibt die Konfigurationsdatei an
-          # -d gibt das Zielverzeichnis an (relativ zum Repo-Root)
-          # -v für ausführliche Ausgabe (hilft beim Debuggen)
+          # Lädt die Datenbanken nach ./backend/data herunter
           geoipupdate -f GeoIP.conf -d ./backend/data -v
           echo "geoipupdate finished."
 
-      - name: Check for changes
-        id: check_changes
+      - name: Configure Git and LFS
         run: |
-          # Prüfe, ob sich die .mmdb Dateien geändert haben
-          if git status --porcelain | grep -q 'backend/data/.*\.mmdb'; then
-            echo "Changes detected in MaxMind databases."
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "No changes detected in MaxMind databases."
-            echo "changed=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Commit and push changes
-        # Nur ausführen, wenn Schritt 'check_changes' Änderungen gemeldet hat
-        if: steps.check_changes.outputs.changed == 'true'
-        run: |
-          echo "Committing and pushing changes..."
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          # Installiere Git LFS Hooks für diesen Run
+          git lfs install
+
+      - name: Track and Commit changes (LFS)
+        run: |
+          # Sage Git, dass .mmdb Dateien mit LFS verwaltet werden sollen
+          git lfs track "backend/data/*.mmdb"
+          
+          # Füge .gitattributes (hier steht die LFS-Konfiguration drin) hinzu
+          git add .gitattributes
+          
+          # Füge die eigentlichen Datenbank-Dateien hinzu
           git add ./backend/data/*.mmdb
-          # Erstelle Commit-Nachricht mit Datum
-          COMMIT_DATE=$(date -u +"%Y-%m-%d")
-          git commit -m "Update MaxMind GeoLite2 databases (${COMMIT_DATE})"
-          # Pushe zum aktuellen Branch (z.B. main)
-          git push
-          echo "Changes pushed."
-        # Umgebungsvariable für den Token (wird automatisch von GitHub bereitgestellt)
+
+          # Prüfe, ob Änderungen zum Committen vorliegen (staged changes)
+          if git diff --staged --quiet; then
+            echo "No changes detected in MaxMind databases."
+          else
+            echo "Changes detected. Committing..."
+            COMMIT_DATE=$(date -u +"%Y-%m-%d")
+            git commit -m "Update MaxMind GeoLite2 databases (LFS) (${COMMIT_DATE})"
+            git push
+            echo "Changes pushed via LFS."
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: No changes to commit
-        if: steps.check_changes.outputs.changed == 'false'
-        run: echo "Skipping commit as no database files were updated."
