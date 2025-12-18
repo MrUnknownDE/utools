@@ -23,6 +23,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          lfs: true # WICHTIG: Lädt die echten LFS-Dateien (MaxMind DBs) herunter
 
       - name: Get short SHA
         id: vars
