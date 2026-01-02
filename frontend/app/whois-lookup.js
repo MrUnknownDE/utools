@@ -43,6 +43,11 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {function} displayFn - Funktion zur Formatierung und Anzeige der Daten im outputElement.
      */
     async function fetchAndDisplay(endpoint, params, resultsSection, loaderElement, errorElement, queryElement, outputElement, displayFn) {
+        // Reset animation
+        resultsSection.classList.remove('fade-in');
+        void resultsSection.offsetWidth; // Trigger reflow
+        resultsSection.classList.add('fade-in');
+
         resultsSection.classList.remove('hidden');
         loaderElement.classList.remove('hidden');
         errorElement.classList.add('hidden');
@@ -94,10 +99,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function displayWhoisResults(data, outputEl) {
         // WHOIS data can be large and unstructured, display as raw text
         if (typeof data.result === 'string') {
-             outputEl.textContent = data.result; // Display raw text
+            outputEl.textContent = data.result; // Display raw text
         } else {
-             // Fallback if the result is not a string (shouldn't happen with current backend)
-             outputEl.textContent = JSON.stringify(data.result, null, 2);
+            // Fallback if the result is not a string (shouldn't happen with current backend)
+            outputEl.textContent = JSON.stringify(data.result, null, 2);
         }
     }
 

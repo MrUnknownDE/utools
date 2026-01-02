@@ -149,33 +149,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-     /**
-      * Aktualisiert die rDNS Liste generisch.
-      * @param {HTMLElement} listElement - Das UL Element.
-      * @param {Array|object} rdnsData - Die rDNS Daten oder ein Fehlerobjekt.
-      * @param {HTMLElement} [loaderElement] - Das zu versteckende Loader-Element.
-      * @param {HTMLElement} [errorElement] - Das Element zur Anzeige von Fehlern.
-      */
+    /**
+     * Aktualisiert die rDNS Liste generisch.
+     * @param {HTMLElement} listElement - Das UL Element.
+     * @param {Array|object} rdnsData - Die rDNS Daten oder ein Fehlerobjekt.
+     * @param {HTMLElement} [loaderElement] - Das zu versteckende Loader-Element.
+     * @param {HTMLElement} [errorElement] - Das Element zur Anzeige von Fehlern.
+     */
     function updateRdns(listElement, rdnsData, loaderElement = null, errorElement = null) {
         if (loaderElement) loaderElement.classList.add('hidden');
         if (listElement) listElement.innerHTML = ''; // Clear previous entries
         if (errorElement) errorElement.textContent = '';
 
-         // Zeige das Elternelement des listElements, falls es vorher versteckt war
-         const dataContainer = listElement?.closest('div:not(.loader)');
-         if (dataContainer?.classList.contains('hidden')) {
+        // Zeige das Elternelement des listElements, falls es vorher versteckt war
+        const dataContainer = listElement?.closest('div:not(.loader)');
+        if (dataContainer?.classList.contains('hidden')) {
             dataContainer.classList.remove('hidden');
         }
 
         if (rdnsData && Array.isArray(rdnsData)) {
             if (rdnsData.length > 0) {
-                 rdnsData.forEach(hostname => {
+                rdnsData.forEach(hostname => {
                     const li = document.createElement('li');
                     li.textContent = hostname;
                     if (listElement) listElement.appendChild(li);
                 });
             } else {
-                 if (listElement) listElement.innerHTML = '<li>No rDNS records found.</li>'; // Klarere Meldung
+                if (listElement) listElement.innerHTML = '<li>No rDNS records found.</li>'; // Klarere Meldung
             }
         } else if (rdnsData && rdnsData.error) {
             if (listElement) listElement.innerHTML = '<li>-</li>';
@@ -241,10 +241,10 @@ document.addEventListener('DOMContentLoaded', () => {
             messageElement.classList.remove('hidden');
             messageElement.textContent = 'Map could not be loaded (missing or invalid coordinates).';
             // If map existed, remove it to clean up resources
-             if(mapInstance) {
-                 mapInstance.remove();
-                 window[mapId + '_instance'] = null;
-             }
+            if (mapInstance) {
+                mapInstance.remove();
+                window[mapId + '_instance'] = null;
+            }
             return null;
         }
     }
@@ -357,8 +357,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-     /** Setzt den Lookup-Ergebnisbereich zurück */
-     function resetLookupResults() {
+    /** Setzt den Lookup-Ergebnisbereich zurück */
+    function resetLookupResults() {
         if (!lookupResultsSection) return;
         lookupResultsSection.classList.add('hidden');
         if (lookupResultLoader) lookupResultLoader.classList.add('hidden');
@@ -396,7 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
             portScanEventSource.close();
             portScanEventSource = null;
         }
-     }
+    }
 
     /** Ruft Informationen für eine spezifische IP ab */
     async function fetchLookupInfo(ipToLookup) {
@@ -452,8 +452,8 @@ document.addEventListener('DOMContentLoaded', () => {
             resetLookupResults(); // Hide the section again on error
 
         } finally {
-             if (lookupResultLoader) lookupResultLoader.classList.add('hidden'); // Hide main loader
-             // Map loader is handled by initOrUpdateMap
+            if (lookupResultLoader) lookupResultLoader.classList.add('hidden'); // Hide main loader
+            // Map loader is handled by initOrUpdateMap
         }
     }
 
@@ -522,10 +522,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.stats.rtt) {
                     outputText += `Round Trip Time (ms): min=${data.stats.rtt.min}, avg=${data.stats.rtt.avg}, max=${data.stats.rtt.max}, mdev=${data.stats.rtt.mdev}\n`;
                 } else if (data.stats.packets.received === 0) {
-                     outputText += `Status: Host unreachable or request timed out.\n`;
+                    outputText += `Status: Host unreachable or request timed out.\n`;
                 }
             } else {
-                 outputText += `Could not parse statistics.\n`;
+                outputText += `Could not parse statistics.\n`;
             }
             outputText += `\n--- Raw Output ---\n${data.rawOutput || 'No raw output available.'}`;
             lookupPingOutputEl.textContent = outputText;
@@ -571,7 +571,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('EventSource failed:', event);
             let errorMsg = 'Connection error during traceroute.';
             if (eventSource.readyState === EventSource.CLOSED) {
-                 errorMsg = 'Connection closed. Server might have stopped or a network issue occurred.';
+                errorMsg = 'Connection closed. Server might have stopped or a network issue occurred.';
             }
             tracerouteMessage.textContent = errorMsg;
             tracerouteLoader.classList.add('hidden');
@@ -587,14 +587,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         eventSource.addEventListener('info', (event) => {
-             try {
+            try {
                 const infoData = JSON.parse(event.data);
                 displayTracerouteLine(infoData.message, 'info-line');
             } catch (e) { displayTracerouteLine(`[Error parsing info data: ${event.data}]`, 'error-line'); }
         });
 
         eventSource.addEventListener('error', (event) => { // Backend error event
-             try {
+            try {
                 const errorData = JSON.parse(event.data);
                 displayTracerouteLine(errorData.error, 'error-line');
                 tracerouteMessage.textContent = `Error during traceroute: ${errorData.error}`;
@@ -603,7 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         eventSource.addEventListener('end', (event) => {
             console.log('SSE connection closed by server (end event).');
-             try {
+            try {
                 const endData = JSON.parse(event.data);
                 const endMessage = `Traceroute finished ${endData.exitCode === 0 ? 'successfully' : `with exit code ${endData.exitCode}`}.`;
                 displayTracerouteLine(endMessage, 'end-line');
@@ -615,18 +615,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function displayTracerouteLine(text, className = '') {
-         if (!tracerouteOutputEl) return;
-         const lineDiv = document.createElement('div');
-         if (className) lineDiv.classList.add(className);
-         lineDiv.textContent = text;
-         tracerouteOutputEl.appendChild(lineDiv);
-         tracerouteOutputEl.scrollTop = tracerouteOutputEl.scrollHeight;
+        if (!tracerouteOutputEl) return;
+        const lineDiv = document.createElement('div');
+        if (className) lineDiv.classList.add(className);
+        lineDiv.classList.add('fade-in'); // Animation hinzufügen
+        lineDiv.textContent = text;
+        tracerouteOutputEl.appendChild(lineDiv);
+        tracerouteOutputEl.scrollTop = tracerouteOutputEl.scrollHeight;
     }
 
     function displayTracerouteHop(hopData) {
         if (!tracerouteOutputEl) return;
         const lineDiv = document.createElement('div');
-        lineDiv.classList.add('hop-line');
+        lineDiv.classList.add('hop-line', 'fade-in'); // Animation hinzufügen
 
         const hopNumSpan = document.createElement('span');
         hopNumSpan.classList.add('hop-number');
@@ -645,12 +646,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 lineDiv.appendChild(hostSpan);
             }
         } else if (hopData.rtt && hopData.rtt.every(r => r === '*')) {
-             const timeoutSpan = document.createElement('span');
-             timeoutSpan.classList.add('hop-timeout');
-             timeoutSpan.textContent = '* * *';
-             lineDiv.appendChild(timeoutSpan);
+            const timeoutSpan = document.createElement('span');
+            timeoutSpan.classList.add('hop-timeout');
+            timeoutSpan.textContent = '* * *';
+            lineDiv.appendChild(timeoutSpan);
         } else {
-             lineDiv.appendChild(document.createTextNode(hopData.rawLine || 'Unknown hop format'));
+            lineDiv.appendChild(document.createTextNode(hopData.rawLine || 'Unknown hop format'));
         }
 
         if (hopData.rtt && Array.isArray(hopData.rtt)) {
@@ -729,7 +730,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function displayPortScanResult(data) {
         if (!portScanOutputEl) return;
         const lineDiv = document.createElement('div');
-        lineDiv.classList.add('mb-1');
+        lineDiv.classList.add('mb-1', 'fade-in'); // Animation hinzufügen
 
         let statusColor = 'text-gray-400';
         let statusText = data.status.toUpperCase();
@@ -794,38 +795,38 @@ document.addEventListener('DOMContentLoaded', () => {
                     // lookupIpInput.value = resolvedIp;
                     fetchLookupInfo(resolvedIp); // Fetch info for the resolved IP
                 } else {
-                     // Should be caught by the error in resolveDomainToIp, but as a fallback:
-                     showLookupError(`Could not resolve domain ${query} to an IP address.`);
+                    // Should be caught by the error in resolveDomainToIp, but as a fallback:
+                    showLookupError(`Could not resolve domain ${query} to an IP address.`);
                 }
             } catch (error) {
                 showLookupError(error.message); // Display resolution error
             } finally {
-                 hideLookupStatus(); // Hide status message regardless of outcome
+                hideLookupStatus(); // Hide status message regardless of outcome
             }
         }
     }
 
 
-     function handleLookupPingClick() {
-         if (currentLookupIp) {
-             console.log(`Starting ping for looked-up IP: ${currentLookupIp}`);
-             runLookupPing(currentLookupIp); // Call the new ping function
-         }
-     }
+    function handleLookupPingClick() {
+        if (currentLookupIp) {
+            console.log(`Starting ping for looked-up IP: ${currentLookupIp}`);
+            runLookupPing(currentLookupIp); // Call the new ping function
+        }
+    }
 
-     function handleLookupTraceClick() {
-         if (currentLookupIp) {
-             console.log(`Starting traceroute for looked-up IP: ${currentLookupIp}`);
-             startTraceroute(currentLookupIp);
-         }
-     }
+    function handleLookupTraceClick() {
+        if (currentLookupIp) {
+            console.log(`Starting traceroute for looked-up IP: ${currentLookupIp}`);
+            startTraceroute(currentLookupIp);
+        }
+    }
 
-     function handleLookupScanClick() {
+    function handleLookupScanClick() {
         if (currentLookupIp) {
             console.log(`Starting port scan for looked-up IP: ${currentLookupIp}`);
             startPortScan(currentLookupIp);
         }
-     }
+    }
 
     // --- Initial Load & Event Listeners ---
     fetchIpInfo(); // Lade Infos zur eigenen IP

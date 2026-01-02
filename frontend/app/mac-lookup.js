@@ -43,6 +43,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // Reset animation
+        macLookupResultsSection.classList.remove('fade-in');
+        void macLookupResultsSection.offsetWidth; // Trigger reflow
+        macLookupResultsSection.classList.add('fade-in');
+
         macLookupResultsSection.classList.remove('hidden');
         macLookupLoader.classList.remove('hidden');
         macLookupErrorEl.classList.add('hidden');

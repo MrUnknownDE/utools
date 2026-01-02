@@ -44,6 +44,11 @@ document.addEventListener('DOMContentLoaded', () => {
      * @param {function} displayFn - Funktion zur Formatierung und Anzeige der Daten im outputElement.
      */
     async function fetchAndDisplay(endpoint, params, resultsSection, loaderElement, errorElement, queryElement, outputElement, displayFn) {
+        // Reset animation
+        resultsSection.classList.remove('fade-in');
+        void resultsSection.offsetWidth; // Trigger reflow
+        resultsSection.classList.add('fade-in');
+
         resultsSection.classList.remove('hidden');
         loaderElement.classList.remove('hidden');
         errorElement.classList.add('hidden');
