@@ -5,7 +5,7 @@ const whois = require('whois-json');
 const pino = require('pino');
 
 // Import utilities
-const { isValidIp, isValidDomain } = require('../utils');
+const { isValidIp, isValidDomain, isPrivateIp } = require('../utils');
 
 // Logger for this module
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -24,6 +24,11 @@ router.get('/', async (req, res, next) => {
     if (!isValidIp(query) && !isValidDomain(query)) {
         logger.warn({ requestIp, query }, 'Invalid query for WHOIS lookup');
         return res.status(400).json({ success: false, error: 'Invalid domain name or IP address provided for WHOIS lookup.' });
+    }
+
+    if (isValidIp(query) && isPrivateIp(query)) {
+         logger.warn({ requestIp, query }, 'Attempt to WHOIS lookup private IP blocked');
+         return res.status(403).json({ success: false, error: 'WHOIS lookup for private or local IP addresses is not supported.' });
     }
 
     // Note: No isPrivateIp check here, as WHOIS for IPs might be desired regardless of range,

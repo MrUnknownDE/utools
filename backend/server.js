@@ -5,10 +5,10 @@ const Sentry = require("@sentry/node");
 
 // Initialize Sentry BEFORE requiring any other modules!
 Sentry.init({
-  // DSN should now be available from process.env if set in .env
-  dsn: process.env.SENTRY_DSN || "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@oooooooooooooooo.ingest.sentry.io/123456",
-  // Enable tracing - Adjust sample rate as needed
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    // DSN should now be available from process.env if set in .env
+    dsn: process.env.SENTRY_DSN || "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@oooooooooooooooo.ingest.sentry.io/123456",
+    // Enable tracing - Adjust sample rate as needed
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 });
 
 // DEBUG: Check Sentry object after init
@@ -36,10 +36,10 @@ const macLookupRoutes = require('./routes/macLookup');
 
 // --- Logger Initialisierung ---
 const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: process.env.NODE_ENV !== 'production'
-    ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:standard', ignore: 'pid,hostname' } }
-    : undefined,
+    level: process.env.LOG_LEVEL || 'info',
+    transport: process.env.NODE_ENV !== 'production'
+        ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:standard', ignore: 'pid,hostname' } }
+        : undefined,
 });
 
 // Create Express app instance
@@ -71,11 +71,11 @@ app.set('trust proxy', parseInt(process.env.TRUST_PROXY_COUNT || '2', 10)); // A
 // --- Rate Limiter ---
 // Apply a general limiter to most routes
 const generalLimiter = rateLimit({
-    windowMs: 5 * 60 * 1000, // 5 minutes
-    max: parseInt(process.env.RATE_LIMIT_MAX || (process.env.NODE_ENV === 'production' ? '20' : '200'), 10), // Requests per window per IP, ensure integer
+    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || (5 * 60 * 1000).toString(), 10), // Default 5 minutes
+    max: parseInt(process.env.RATE_LIMIT_MAX || (process.env.NODE_ENV === 'production' ? '20' : '200'), 10), // Requests per window per IP
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    message: { success: false, error: 'Too many requests from this IP, please try again after 5 minutes' },
+    message: { success: false, error: 'Too many requests from this IP, please try again after a while' },
     keyGenerator: (req, res) => req.ip, // Use client IP address from Express
     handler: (req, res, next, options) => {
         logger.warn({ ip: req.ip, route: req.originalUrl }, 'Rate limit exceeded');
@@ -87,15 +87,8 @@ const generalLimiter = rateLimit({
     }
 });
 
-// Apply the limiter to specific API routes that perform external actions
-// Note: /api/ipinfo and /api/version are often excluded as they are less resource-intensive
-app.use('/api/ping', generalLimiter);
-app.use('/api/traceroute', generalLimiter);
-app.use('/api/lookup', generalLimiter);
-app.use('/api/dns-lookup', generalLimiter);
-app.use('/api/whois-lookup', generalLimiter);
-app.use('/api/port-scan', generalLimiter);
-app.use('/api/mac-lookup', generalLimiter);
+// Apply the limiter to ALL API routes
+app.use('/api', generalLimiter);
 
 
 // --- API Routes ---
@@ -116,12 +109,12 @@ app.use('/api/mac-lookup', macLookupRoutes);
 if (Sentry.Handlers && Sentry.Handlers.errorHandler) {
     app.use(Sentry.Handlers.errorHandler({
         shouldHandleError(error) {
-          // Capture all 500 errors
-          if (error.status === 500) return true;
-          // Capture specific client errors if needed, e.g., 403
-          // if (error.status === 403) return true;
-          // By default, capture only server errors (5xx)
-          return error.status >= 500;
+            // Capture all 500 errors
+            if (error.status === 500) return true;
+            // Capture specific client errors if needed, e.g., 403
+            // if (error.status === 403) return true;
+            // By default, capture only server errors (5xx)
+            return error.status >= 500;
         },
     }));
 } else {
@@ -182,9 +175,9 @@ async function gracefulShutdown(signal) {
                 await Sentry.close(2000); // 2 second timeout
                 logger.info('Sentry closed.');
             } catch (e) {
-                 logger.error({ error: e.message }, 'Error closing Sentry');
+                logger.error({ error: e.message }, 'Error closing Sentry');
             } finally {
-                 process.exit(128 + signals[signal]); // Standard exit code for signals
+                process.exit(128 + signals[signal]); // Standard exit code for signals
             }
         });
     } else {
@@ -194,9 +187,9 @@ async function gracefulShutdown(signal) {
             await Sentry.close(2000);
             logger.info('Sentry closed (server never started).');
         } catch (e) {
-             logger.error({ error: e.message }, 'Error closing Sentry (server never started)');
+            logger.error({ error: e.message }, 'Error closing Sentry (server never started)');
         } finally {
-             process.exit(128 + signals[signal]);
+            process.exit(128 + signals[signal]);
         }
     }
 
@@ -209,5 +202,5 @@ async function gracefulShutdown(signal) {
 
 // Register signal handlers
 Object.keys(signals).forEach((signal) => {
-  process.on(signal, () => gracefulShutdown(signal));
+    process.on(signal, () => gracefulShutdown(signal));
 });

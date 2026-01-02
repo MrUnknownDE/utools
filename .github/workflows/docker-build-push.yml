@@ -17,6 +17,8 @@ jobs:
     env:
       REGISTRY: docker.io
       DOCKERHUB_USER_LC: ${{ secrets.DOCKERHUB_USERNAME }}
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
