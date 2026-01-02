@@ -18,10 +18,9 @@ router.get('/', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Invalid MAC address format provided.' });
     }
 
-    // Use 'oui' library to find vendor
     try {
-        // Dynamic import for ESM-only 'oui' module
-        const ouiModule = await import('oui');
+        // Dynamic import for ESM-only 'oui' module. Pointing to dist/index.js explicitly.
+        const ouiModule = await import('oui/dist/index.js');
         const oui = ouiModule.default;
 
         const ouiData = oui(mac);
