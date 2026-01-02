@@ -1,6 +1,6 @@
 # Stage 1: Build Dependencies
 # Use an official Node.js runtime as a parent image
-FROM node:18-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ RUN npm ci --only=production
 # REMOVED: RUN npm i oui (should be installed by npm ci now)
 
 # Stage 2: Production Image
-FROM node:18-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
