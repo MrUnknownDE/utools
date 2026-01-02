@@ -1,6 +1,7 @@
 const express = require('express');
 const Sentry = require("@sentry/node");
 const pino = require('pino');
+const { getVendor } = require('mac-oui-lookup');
 const { isValidMacAddress } = require('../utils');
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
@@ -19,17 +20,7 @@ router.get('/', async (req, res) => {
     }
 
     try {
-        // Dynamic import for ESM-only 'oui' module. Pointing to dist/index.js explicitly.
-        const ouiModule = await import('oui/dist/index.js');
-        const oui = ouiModule.default;
-
-        const ouiData = oui(mac);
-        // oui returns a string (Vendor Name) or null if not found
-
-        let vendor = null;
-        if (ouiData) {
-            vendor = typeof ouiData === 'string' ? ouiData : ouiData.split('\n')[0];
-        }
+        const vendor = getVendor(mac);
 
         if (vendor) {
             logger.info({ requestIp, mac, vendor }, 'MAC lookup successful');
