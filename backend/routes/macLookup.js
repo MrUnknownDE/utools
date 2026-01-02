@@ -1,6 +1,5 @@
 const express = require('express');
 const Sentry = require("@sentry/node");
-const oui = require('oui');
 const pino = require('pino');
 const { isValidMacAddress } = require('../utils');
 
@@ -21,10 +20,12 @@ router.get('/', async (req, res) => {
 
     // Use 'oui' library to find vendor
     try {
+        // Dynamic import for ESM-only 'oui' module
+        const ouiModule = await import('oui');
+        const oui = ouiModule.default;
+
         const ouiData = oui(mac);
         // oui returns a string (Vendor Name) or null if not found
-        // Sometimes it returns an object? The documentation says it returns the organization name string.
-        // Let's handle both just in case, but usually it's a string or null.
 
         let vendor = null;
         if (ouiData) {
@@ -38,15 +39,11 @@ router.get('/', async (req, res) => {
             logger.info({ requestIp, mac }, 'MAC address not found in OUI database');
             res.status(404).json({ success: false, error: 'Vendor not found for this MAC address.' });
         }
-    } catch (err) {
-        // oui might throw on invalid input, though we validated it.
-        throw err;
+    } catch (error) {
+        logger.error({ requestIp, mac, error: error.message }, 'MAC lookup failed');
+        Sentry.captureException(error, { extra: { requestIp, mac } });
+        res.status(500).json({ success: false, error: 'An unexpected error occurred during the MAC lookup.' });
     }
-} catch (error) {
-    logger.error({ requestIp, mac, error: error.message }, 'MAC lookup failed');
-    Sentry.captureException(error, { extra: { requestIp, mac } });
-    res.status(500).json({ success: false, error: 'An unexpected error occurred during the MAC lookup.' });
-}
 });
 
 module.exports = router;
