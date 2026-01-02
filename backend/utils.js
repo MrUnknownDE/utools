@@ -29,6 +29,12 @@ function isValidIp(ip) {
  */
 function isPrivateIp(ip) {
     if (!ip) return false;
+
+    // Normalize IPv6-mapped IPv4 addresses (e.g., ::ffff:192.168.1.1 -> 192.168.1.1)
+    if (ip.startsWith('::ffff:')) {
+        ip = ip.substring(7);
+    }
+
     const ipVersion = net.isIP(ip);
 
     if (ipVersion === 4) {
@@ -38,12 +44,15 @@ function isPrivateIp(ip) {
             (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || // 172.16.0.0/12
             (parts[0] === 192 && parts[1] === 168) || // 192.168.0.0/16
             parts[0] === 127 || // 127.0.0.0/8 (Loopback)
-            (parts[0] === 169 && parts[1] === 254) // 169.254.0.0/16 (Link-local)
+            (parts[0] === 169 && parts[1] === 254) || // 169.254.0.0/16 (Link-local)
+            // Block 0.0.0.0 (Commonly "Any" or "Current Network")
+            (parts[0] === 0 && parts[1] === 0 && parts[2] === 0 && parts[3] === 0)
         );
     } else if (ipVersion === 6) {
         const lowerCaseIp = ip.toLowerCase();
         return (
             lowerCaseIp === '::1' || // ::1/128 (Loopback)
+            lowerCaseIp === '::' || // ::/128 (Unspecified)
             lowerCaseIp.startsWith('fc') || lowerCaseIp.startsWith('fd') || // fc00::/7 (Unique Local)
             lowerCaseIp.startsWith('fe8') || lowerCaseIp.startsWith('fe9') || // fe80::/10 (Link-local)
             lowerCaseIp.startsWith('fea') || lowerCaseIp.startsWith('feb')
@@ -181,7 +190,7 @@ function parsePingOutput(pingOutput) {
 
         // Handle both 'rtt' and 'round-trip' prefixes for broader compatibility
         const rttLine = lines.find(line => line.startsWith('rtt min/avg/max/mdev') || line.startsWith('round-trip min/avg/max/stddev'));
-         if (rttLine) {
+        if (rttLine) {
             const rttMatch = rttLine.match(/([\d.]+)\/([\d.]+)\/([\d.]+)\/([\d.]+)/);
             if (rttMatch) {
                 rtt = {
@@ -200,7 +209,7 @@ function parsePingOutput(pingOutput) {
 
         // Check for common error messages or patterns
         if (packetsTransmitted > 0 && packetsReceived === 0) {
-             result.error = "Request timed out or host unreachable.";
+            result.error = "Request timed out or host unreachable.";
         } else if (pingOutput.includes('unknown host') || pingOutput.includes('Name or service not known')) {
             result.error = "Unknown host.";
         }
@@ -230,8 +239,8 @@ function parseTracerouteLine(line) {
     const timeoutMatch = line.match(/^(\s*\d+)\s+(\*\s+\*\s+\*)/); // Match lines with only timeouts
 
     if (timeoutMatch) {
-         // Handle timeout line
-         return {
+        // Handle timeout line
+        return {
             hop: parseInt(timeoutMatch[1].trim(), 10),
             hostname: null,
             ip: null,
@@ -257,7 +266,7 @@ function parseTracerouteLine(line) {
         // Pad with '*' if fewer than 3 RTTs were found (e.g., due to timeouts)
         while (rtts.length < 3) rtts.push('*');
 
-         return {
+        return {
             hop: hop,
             hostname: hostname || null, // Use null if hostname wasn't captured
             ip: ip,
@@ -287,7 +296,20 @@ function checkPort(port, host, timeout = 2000) {
     };
     const service = commonPorts[port] || 'Unknown';
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+        // DEFENSE IN DEPTH: Prevent scanning of private IPs at the function level
+        if (!isValidIp(host) || isPrivateIp(host)) {
+            const error = new Error(`Scanning restricted: ${host} is not a valid public IP.`);
+            logger.warn({ host, port }, "Blocked attempt to scan restricted IP in checkPort");
+            return resolve({
+                port,
+                status: 'error',
+                service,
+                error: 'Restricted IP',
+                details: 'Scanning private or invalid IPs is not allowed.'
+            });
+        }
+
         const socket = new net.Socket();
         socket.setTimeout(timeout);
 
