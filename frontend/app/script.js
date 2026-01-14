@@ -785,7 +785,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentIp) {
             console.log(`User IP link clicked: ${currentIp}. Redirecting to WHOIS lookup...`);
             // Leite zur Whois-Seite weiter und übergebe die IP als 'query'-Parameter
-            window.location.href = `whois-lookup.html?query=${encodeURIComponent(currentIp)}`;
+            window.location.href = `/whois?query=${encodeURIComponent(currentIp)}`;
         } else {
             console.warn('Cannot redirect to WHOIS: current IP is not available.');
         }
