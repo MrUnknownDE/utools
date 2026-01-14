@@ -328,6 +328,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Lookup Functions ---
 
+    // --- URL Parameter Functions ---
+
+    /**
+     * Updates the URL with IP lookup parameter
+     * @param {string} ip - The IP address or domain to lookup
+     */
+    function updateLookupUrlParams(ip) {
+        const url = new URL(window.location);
+        url.searchParams.set('ip', ip);
+        window.history.pushState({}, '', url);
+    }
+
+    /**
+     * Reads URL parameters and returns IP if present
+     * @returns {string|null} IP or domain from URL, or null if not present
+     */
+    function getLookupUrlParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('ip');
+    }
+
+
     /** Zeigt Fehler im Lookup-Bereich an */
     function showLookupError(message) {
         if (!lookupErrorEl) return;
@@ -780,6 +802,9 @@ document.addEventListener('DOMContentLoaded', () => {
         resetLookupResults(); // Reset results before starting
         hideLookupError();
 
+        // Update URL with the query parameter
+        updateLookupUrlParams(query);
+
         if (isValidIpAddress(query)) {
             // Input is an IP address
             console.log(`Lookup button clicked for IP: ${query}`);
@@ -829,6 +854,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    /**
+     * Executes IP lookup from URL parameters if they exist
+     */
+    function executeLookupFromUrl() {
+        const ipParam = getLookupUrlParams();
+        if (ipParam && lookupIpInput) {
+            // Populate the input field
+            lookupIpInput.value = ipParam;
+
+            // Trigger the lookup
+            handleLookupClick();
+        }
+    }
+
     // --- Initial Load & Event Listeners ---
     fetchIpInfo(); // Lade Infos zur eigenen IP
     fetchVersionInfo(); // Lade Versionsinfo für Footer
@@ -844,5 +883,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Der Event Listener für den IP-Link wird jetzt in fetchIpInfo() hinzugefügt,
     // nachdem die IP erfolgreich abgerufen wurde.
+
+    // Execute lookup from URL parameters if present
+    executeLookupFromUrl();
 
 }); // End DOMContentLoaded

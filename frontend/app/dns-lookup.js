@@ -96,6 +96,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- URL Parameter Functions ---
+
+    /**
+     * Updates the URL with DNS lookup parameters
+     * @param {string} domain - The domain name
+     * @param {string} type - The DNS record type
+     */
+    function updateUrlParams(domain, type) {
+        const url = new URL(window.location);
+        url.searchParams.set('domain', domain);
+        url.searchParams.set('type', type);
+        window.history.pushState({}, '', url);
+    }
+
+    /**
+     * Reads URL parameters and returns domain and type if present
+     * @returns {object|null} Object with domain and type, or null if not present
+     */
+    function getUrlParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const domain = urlParams.get('domain');
+        const type = urlParams.get('type');
+
+        if (domain && type) {
+            return { domain, type };
+        }
+        return null;
+    }
+
     // --- DNS Lookup Specific Functions ---
     function displayDnsResults(data, outputEl) {
         if (!data.records || Object.keys(data.records).length === 0) {
@@ -114,6 +143,10 @@ document.addEventListener('DOMContentLoaded', () => {
             dnsLookupErrorEl.classList.remove('hidden');
             return;
         }
+
+        // Update URL with parameters
+        updateUrlParams(domain, type);
+
         fetchAndDisplay(
             '/dns-lookup',
             { domain, type },
@@ -126,6 +159,21 @@ document.addEventListener('DOMContentLoaded', () => {
         );
     }
 
+    /**
+     * Executes DNS lookup from URL parameters if they exist
+     */
+    function executeLookupFromUrl() {
+        const params = getUrlParams();
+        if (params) {
+            // Populate the input fields
+            dnsDomainInput.value = params.domain;
+            dnsTypeSelect.value = params.type;
+
+            // Trigger the lookup
+            handleDnsLookupClick();
+        }
+    }
+
     // --- Initial Load & Event Listeners ---
     fetchVersionInfo(); // Lade Versionsinfo für Footer
 
@@ -133,5 +181,8 @@ document.addEventListener('DOMContentLoaded', () => {
     dnsDomainInput.addEventListener('keypress', (event) => {
         if (event.key === 'Enter') handleDnsLookupClick();
     });
+
+    // Execute lookup from URL parameters if present
+    executeLookupFromUrl();
 
 }); // End DOMContentLoaded
