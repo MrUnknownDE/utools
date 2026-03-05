@@ -9,6 +9,12 @@ Sentry.init({
     dsn: process.env.SENTRY_DSN || "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@oooooooooooooooo.ingest.sentry.io/123456",
     // Enable tracing - Adjust sample rate as needed
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    integrations: [
+        // send console.log, console.warn, and console.error calls as logs to Sentry
+        Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
+    ],
+    // Enable logs to be sent to Sentry
+    enableLogs: true,
 });
 
 // DEBUG: Check Sentry object after init
