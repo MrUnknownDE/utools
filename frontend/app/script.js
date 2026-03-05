@@ -287,7 +287,14 @@ document.addEventListener('DOMContentLoaded', () => {
             updateField(coordsEl, data.geo?.latitude ? `${data.geo.latitude}, ${data.geo.longitude}` : null);
             updateField(timezoneEl, data.geo?.timezone, geoLoader); // Hide loader on last geo field
 
-            updateField(asnNumberEl, data.asn?.number, null, asnErrorEl);
+            updateField(asnNumberEl, data.asn?.number
+                ? `AS${data.asn.number}`
+                : null, null, asnErrorEl);
+            // Make ASN a clickable link to ASN Lookup
+            if (data.asn?.number && asnNumberEl) {
+                asnNumberEl.innerHTML =
+                    `<a href="/asn?asn=${data.asn.number}" class="hover:text-purple-200 underline decoration-dotted transition-colors" title="Open ASN Lookup">AS${data.asn.number}</a>`;
+            }
             updateField(asnOrgEl, data.asn?.organization, asnLoader);
 
             updateRdns(rdnsListEl, data.rdns, rdnsLoader, rdnsErrorEl);
@@ -452,7 +459,13 @@ document.addEventListener('DOMContentLoaded', () => {
             updateField(lookupCoordsEl, data.geo?.latitude ? `${data.geo.latitude}, ${data.geo.longitude}` : null);
             updateField(lookupTimezoneEl, data.geo?.timezone);
 
-            updateField(lookupAsnNumberEl, data.asn?.number, null, lookupAsnErrorEl);
+            // ASN — render as clickable link if available
+            if (data.asn?.number && lookupAsnNumberEl) {
+                lookupAsnNumberEl.innerHTML =
+                    `<a href="/asn?asn=${data.asn.number}" class="text-purple-400 hover:text-purple-300 underline decoration-dotted transition-colors font-mono" title="Open ASN Lookup">AS${data.asn.number}</a>`;
+            } else {
+                updateField(lookupAsnNumberEl, data.asn?.number, null, lookupAsnErrorEl);
+            }
             updateField(lookupAsnOrgEl, data.asn?.organization);
 
             updateRdns(lookupRdnsListEl, data.rdns, null, lookupRdnsErrorEl);

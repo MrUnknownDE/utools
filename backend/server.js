@@ -33,6 +33,7 @@ const whoisLookupRoutes = require('./routes/whoisLookup');
 const versionRoutes = require('./routes/version');
 const portScanRoutes = require('./routes/portScan');
 const macLookupRoutes = require('./routes/macLookup');
+const asnLookupRoutes = require('./routes/asnLookup');
 
 // --- Logger Initialisierung ---
 const logger = pino({
@@ -102,6 +103,7 @@ app.use('/api/whois-lookup', whoisLookupRoutes);
 app.use('/api/version', versionRoutes);
 app.use('/api/port-scan', portScanRoutes);
 app.use('/api/mac-lookup', macLookupRoutes);
+app.use('/api/asn-lookup', asnLookupRoutes);
 
 
 // --- Sentry Error Handler ---
