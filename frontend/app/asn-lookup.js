@@ -124,17 +124,17 @@ function renderPrefixes(prefixes) {
     const toggle = document.getElementById('prefix-toggle');
 
     if (!prefixes || prefixes.length === 0) {
-        list.classList.add('hidden');
-        empty.classList.remove('hidden');
-        toggle.classList.add('hidden');
+        list?.classList.add('hidden');
+        empty?.classList.remove('hidden');
+        toggle?.classList.add('hidden');
         return;
     }
-    empty.classList.add('hidden');
-    toggle.classList.remove('hidden');
+    empty?.classList.add('hidden');
+    toggle?.classList.remove('hidden');
 
     const toShow = showAllPrefixes ? prefixes : prefixes.slice(0, 20);
-    list.innerHTML = toShow.map(p => `<span class="prefix-tag">${p}</span>`).join('');
-    toggle.textContent = showAllPrefixes ? 'Show less' : `Show all (${prefixes.length})`;
+    if (list) list.innerHTML = toShow.map(p => `<span class="prefix-tag">${p}</span>`).join('');
+    if (toggle) toggle.textContent = showAllPrefixes ? 'Show less' : `Show all (${prefixes.length})`;
 }
 
 document.getElementById('prefix-toggle').addEventListener('click', () => {
@@ -148,17 +148,19 @@ function renderIxps(ixps) {
     const empty = document.getElementById('ixp-empty');
 
     if (!ixps || ixps.length === 0) {
-        list.innerHTML = '';
-        empty.classList.remove('hidden');
+        if (list) list.innerHTML = '';
+        empty?.classList.remove('hidden');
         return;
     }
-    empty.classList.add('hidden');
-    list.innerHTML = ixps.map(ix => `
+    empty?.classList.add('hidden');
+    if (list) {
+        list.innerHTML = ixps.map(ix => `
         <div class="ixp-row py-1.5 flex items-center justify-between gap-2 text-sm">
             <span class="text-gray-200 truncate">${ix.name}</span>
             <span class="text-xs text-gray-500 shrink-0">${ix.speed >= 1000 ? `${ix.speed / 1000}G` : `${ix.speed}M`}</span>
         </div>
-    `).join('');
+        `).join('');
+    }
 }
 
 // ─── Neighbour Table ──────────────────────────────────────────────────────────
