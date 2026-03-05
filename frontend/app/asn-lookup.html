@@ -302,7 +302,14 @@
         <!-- Loading -->
         <div id="loading-section" class="hidden flex flex-col items-center gap-4 py-16">
             <div class="loader" style="width:40px;height:40px;border-width:5px;"></div>
-            <p class="text-gray-400 text-sm" id="loading-msg">Fetching AS data…</p>
+            <p class="text-gray-400 text-sm" id="loading-msg">Querying RIPE Stat &amp; PeeringDB…</p>
+            <!-- Shown after 3s for slow lookups -->
+            <div id="loading-hint" class="hidden mt-2 max-w-sm text-center">
+                <p class="text-xs text-amber-400/80 bg-amber-400/10 border border-amber-400/20 rounded-lg px-4 py-2">
+                    ⏳ Large ASes (like Cloudflare, Google, Tier-1 carriers) can take up to 15 seconds on the first
+                    lookup — subsequent lookups are cached for 24h.
+                </p>
+            </div>
         </div>
 
         <!-- Results -->

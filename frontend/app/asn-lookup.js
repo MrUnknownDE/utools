@@ -21,14 +21,22 @@ function showError(msg) {
     errorBox.classList.remove('hidden');
     loadingSection.classList.add('hidden');
     resultsSection.classList.add('hidden');
+    if (window._loadingHintTimer) clearTimeout(window._loadingHintTimer);
 }
 function hideError() { errorBox.classList.add('hidden'); }
 
-function setLoading(msg = 'Fetching AS data…') {
+function setLoading(msg = 'Querying RIPE Stat & PeeringDB…') {
     hideError();
     loadingMsg.textContent = msg;
     loadingSection.classList.remove('hidden');
     resultsSection.classList.add('hidden');
+
+    // After 3s show a hint that large ASes can be slow
+    if (window._loadingHintTimer) clearTimeout(window._loadingHintTimer);
+    window._loadingHintTimer = setTimeout(() => {
+        const hint = document.getElementById('loading-hint');
+        if (hint) hint.classList.remove('hidden');
+    }, 3000);
 }
 
 function updateUrlParam(asn) {
@@ -69,6 +77,10 @@ async function doLookup(rawAsn) {
 function renderResults(data) {
     loadingSection.classList.add('hidden');
     resultsSection.classList.remove('hidden');
+    // Reset loading hint for next lookup
+    if (window._loadingHintTimer) clearTimeout(window._loadingHintTimer);
+    const hint = document.getElementById('loading-hint');
+    if (hint) hint.classList.add('hidden');
 
     // Header
     document.getElementById('res-asn').textContent = `AS${data.asn}`;
@@ -290,13 +302,15 @@ function renderGraph(graph) {
         .attr('fill', '#e5e7eb')
         .text(d => `AS${d.asn}`);
 
-    node.filter(d => d.role !== 'tier1').append('text')
+    // Name label for ALL roles (tier1 gets shorter truncation)
+    node.append('text')
         .attr('dy', d => nodeRadius[d.role] + 23)
-        .attr('font-size', 8)
-        .attr('fill', '#9ca3af')
+        .attr('font-size', d => d.role === 'tier1' ? 7 : 8)
+        .attr('fill', d => d.role === 'tier1' ? '#6b7280' : '#9ca3af')
         .text(d => {
-            const max = d.role === 'center' ? 22 : 16;
-            return d.name && d.name.length > max ? d.name.slice(0, max) + '…' : (d.name || '');
+            if (!d.name) return '';
+            const max = d.role === 'center' ? 22 : d.role === 'tier1' ? 12 : 16;
+            return d.name.length > max ? d.name.slice(0, max) + '…' : d.name;
         });
 
     // ── Tick ──────────────────────────────────────────────────────────────

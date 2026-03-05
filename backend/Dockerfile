@@ -37,8 +37,13 @@ COPY ./data ./data
 
 # Create a non-root user and group
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-# Optional: Change ownership of app files to the new user
-# RUN chown -R appuser:appgroup /app
+
+# Create ASN cache directory and set correct ownership BEFORE switching user
+# This ensures the Docker volume mount is writable by appuser
+RUN mkdir -p /app/asn-cache && chown -R appuser:appgroup /app/asn-cache
+
+# Change ownership of all app files to the new user
+RUN chown -R appuser:appgroup /app
 
 # Switch to the non-root user
 USER appuser

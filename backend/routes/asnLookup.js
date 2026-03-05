@@ -10,7 +10,7 @@ const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 const router = express.Router();
 
 // ─── Filesystem Cache (24h TTL) ───────────────────────────────────────────────
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const CACHE_DIR = process.env.ASN_CACHE_DIR || path.join(__dirname, '..', 'data', 'asn-cache');
 
 // Ensure cache directory exists
@@ -57,7 +57,7 @@ function fetchJson(url) {
                 'User-Agent': 'uTools-Network-Suite/1.0 (https://github.com/MrUnknownDE/utools)',
                 'Accept': 'application/json',
             },
-            timeout: 8000,
+            timeout: 15000,
         }, (res) => {
             let raw = '';
             res.on('data', (chunk) => { raw += chunk; });
@@ -185,13 +185,22 @@ router.get('/', async (req, res, next) => {
     logger.info({ requestIp, asn }, 'ASN lookup request');
 
     try {
-        // Level 1 + Level 2: fetch all base data in parallel
-        const [overview, neighbours, prefixes, peeringdb] = await Promise.all([
+        // Level 1 + Level 2: fetch all base data in parallel (allSettled = one failure won't crash everything)
+        const [overviewResult, neighboursResult, prefixesResult, peeringdbResult] = await Promise.allSettled([
             fetchOverview(asn),
             fetchNeighbours(asn),
             fetchPrefixes(asn),
             fetchPeeringDb(asn),
         ]);
+
+        const overview = overviewResult.status === 'fulfilled' ? overviewResult.value : { asn, name: null, announced: false, type: null };
+        const neighbours = neighboursResult.status === 'fulfilled' ? neighboursResult.value : [];
+        const prefixes = prefixesResult.status === 'fulfilled' ? prefixesResult.value : [];
+        const peeringdb = peeringdbResult.status === 'fulfilled' ? peeringdbResult.value : null;
+
+        if (overviewResult.status === 'rejected') logger.warn({ asn, error: overviewResult.reason?.message }, 'Overview fetch failed, continuing with partial data');
+        if (neighboursResult.status === 'rejected') logger.warn({ asn, error: neighboursResult.reason?.message }, 'Neighbours fetch failed, continuing with partial data');
+        if (prefixesResult.status === 'rejected') logger.warn({ asn, error: prefixesResult.reason?.message }, 'Prefixes fetch failed, continuing with partial data');
 
         // Split neighbours
         const upstreams = neighbours.filter(n => n.type === 'left').sort((a, b) => b.power - a.power).slice(0, 10);
