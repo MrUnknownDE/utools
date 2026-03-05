@@ -441,7 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(data.error || `Network response: ${response.statusText} (${response.status})`);
             }
 
-            console.log(`Received Lookup Info for ${ipToLookup}:`, data);
+            console.log('Received Lookup Info for', ipToLookup, ':', data);
             currentLookupIp = data.ip; // Store the IP that was actually looked up
 
             updateField(lookupIpAddressEl, data.ip); // Display the looked-up IP
@@ -464,7 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lookupScanButton) lookupScanButton.disabled = false;
 
         } catch (error) {
-            console.error(`Failed to fetch lookup info for ${ipToLookup}:`, error);
+            console.error('Failed to fetch lookup info for', ipToLookup, ':', error);
             showLookupError(`Lookup failed: ${error.message}`);
             if (lookupMapMessageEl) {
                 lookupMapMessageEl.textContent = 'Map could not be loaded due to an error.';
@@ -512,7 +512,7 @@ document.addEventListener('DOMContentLoaded', () => {
             throw new Error(data.error || 'No A or AAAA records found.');
 
         } catch (error) {
-            console.error(`DNS resolution failed for ${domain}:`, error);
+            console.error('DNS resolution failed for', domain, ':', error);
             throw new Error(`Could not resolve domain: ${error.message}`);
         }
     }

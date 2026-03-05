@@ -330,6 +330,11 @@ function checkPort(port, host, timeout = 2000) {
             resolve({ port, status, service, error: err.code });
         });
 
+        // Explicit inline guard (defence-in-depth; also satisfies CodeQL SSRF dataflow)
+        if (!isValidIp(host) || isPrivateIp(host)) {
+            socket.destroy();
+            return resolve({ port, status: 'error', service, error: 'Restricted IP' });
+        }
         socket.connect(port, host);
     });
 }
