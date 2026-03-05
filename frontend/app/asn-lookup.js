@@ -100,8 +100,59 @@ function renderResults(data) {
     }
 
     const peeringPolicy = data.peeringdb?.peeringPolicy;
-    document.getElementById('res-policy').textContent =
-        peeringPolicy ? `Peering Policy: ${peeringPolicy}` : '';
+    const policyContainer = document.getElementById('res-policy-container');
+    const policyEl = document.getElementById('res-policy');
+    if (policyContainer && policyEl) {
+        if (peeringPolicy) {
+            policyEl.textContent = peeringPolicy;
+            policyContainer.classList.remove('hidden');
+        } else {
+            policyContainer.classList.add('hidden');
+        }
+    }
+
+    const website = data.peeringdb?.website;
+    const websiteContainer = document.getElementById('res-website-container');
+    const websiteEl = document.getElementById('res-website');
+    if (websiteContainer && websiteEl) {
+        if (website) {
+            websiteEl.href = website;
+            websiteEl.textContent = website.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            websiteContainer.classList.remove('hidden');
+        } else {
+            websiteContainer.classList.add('hidden');
+        }
+    }
+
+    // Rich Info Grid
+    const richInfo = document.getElementById('res-rich-info');
+    let hasRichInfo = false;
+
+    const fields = [
+        { id: 'type', value: data.peeringdb?.infoType },
+        { id: 'scope', value: data.peeringdb?.infoScope },
+        { id: 'traffic', value: data.peeringdb?.infoTraffic },
+        { id: 'ratio', value: data.peeringdb?.infoRatio }
+    ];
+
+    fields.forEach(f => {
+        const container = document.getElementById(`res-info-${f.id}-container`);
+        const el = document.getElementById(`res-info-${f.id}`);
+        if (container && el) {
+            if (f.value) {
+                el.textContent = f.value;
+                container.classList.remove('hidden');
+                hasRichInfo = true;
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+    });
+
+    if (richInfo) {
+        if (hasRichInfo) richInfo.classList.remove('hidden');
+        else richInfo.classList.add('hidden');
+    }
 
     document.getElementById('res-upstream-count').textContent = data.graph?.level2?.upstreams?.length ?? '?';
     document.getElementById('res-downstream-count').textContent = data.graph?.level2?.downstreams?.length ?? '?';

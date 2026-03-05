@@ -143,6 +143,9 @@ async function fetchPeeringDb(asn) {
         const result = {
             peeringPolicy: net.policy_general || null,
             infoType: net.info_type || null,
+            infoTraffic: net.info_traffic || null,
+            infoRatio: net.info_ratio || null,
+            infoScope: net.info_scope || null,
             website: net.website || null,
             ixps: (net.netixlan_set || []).map(ix => ({
                 name: ix.name,
