@@ -199,8 +199,13 @@ function renderGraph(graph) {
     }
 
     addNode(graph.center.asn, graph.center.name, 'center');
-    graph.level2.upstreams.forEach(n => addNode(n.asn, n.name, 'upstream'));
-    graph.level2.downstreams.forEach(n => addNode(n.asn, n.name, 'downstream'));
+
+    // Limit graph nodes to top 15 to prevent Physics Engine crash & unreadable hairball
+    const vizUpstreams = graph.level2.upstreams.slice(0, 15);
+    const vizDownstreams = graph.level2.downstreams.slice(0, 15);
+
+    vizUpstreams.forEach(n => addNode(n.asn, n.name, 'upstream'));
+    vizDownstreams.forEach(n => addNode(n.asn, n.name, 'downstream'));
     graph.level3.forEach(d => {
         d.upstreams.forEach(n => addNode(n.asn, n.name, 'tier1'));
     });
@@ -210,10 +215,10 @@ function renderGraph(graph) {
     const links = [];
     const centerId = String(graph.center.asn);
 
-    graph.level2.upstreams.forEach(n => {
+    vizUpstreams.forEach(n => {
         links.push({ source: String(n.asn), target: centerId, type: 'upstream', power: n.power || 1 });
     });
-    graph.level2.downstreams.forEach(n => {
+    vizDownstreams.forEach(n => {
         links.push({ source: centerId, target: String(n.asn), type: 'downstream', power: n.power || 1 });
     });
     graph.level3.forEach(d => {

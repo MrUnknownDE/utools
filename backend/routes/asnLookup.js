@@ -202,17 +202,20 @@ router.get('/', async (req, res, next) => {
         if (neighboursResult.status === 'rejected') logger.warn({ asn, error: neighboursResult.reason?.message }, 'Neighbours fetch failed, continuing with partial data');
         if (prefixesResult.status === 'rejected') logger.warn({ asn, error: prefixesResult.reason?.message }, 'Prefixes fetch failed, continuing with partial data');
 
-        // Split neighbours
-        const upstreams = neighbours.filter(n => n.type === 'left').sort((a, b) => b.power - a.power).slice(0, 10);
-        const downstreams = neighbours.filter(n => n.type === 'right').sort((a, b) => b.power - a.power).slice(0, 10);
+        // Split neighbours (keep ALL of them, sorted by power)
+        const allUpstreams = neighbours.filter(n => n.type === 'left').sort((a, b) => b.power - a.power);
+        const allDownstreams = neighbours.filter(n => n.type === 'right').sort((a, b) => b.power - a.power);
 
-        // Resolve names for ALL Level 2 nodes (both upstreams and downstreams)
-        const level2Asns = [...new Set([...upstreams, ...downstreams].map(n => n.asn))];
-        const level2Names = await resolveNames(level2Asns);
+        // Resolve names for only the Top 25 of each, to prevent hammering the RIPE API (rate limits)
+        const topLevel2Asns = [...new Set([
+            ...allUpstreams.slice(0, 25),
+            ...allDownstreams.slice(0, 25)
+        ].map(n => n.asn))];
+        const level2Names = await resolveNames(topLevel2Asns);
 
         // Level 3: fetch upstreams-of-upstreams for top 5 Level 2 upstreams
         const level3Raw = await Promise.allSettled(
-            upstreams.slice(0, 5).map(async (upstreamNode) => {
+            allUpstreams.slice(0, 5).map(async (upstreamNode) => {
                 const theirNeighbours = await fetchNeighbours(upstreamNode.asn);
                 const theirUpstreams = theirNeighbours
                     .filter(n => n.type === 'left')
@@ -234,8 +237,8 @@ router.get('/', async (req, res, next) => {
         const graph = {
             center: { asn, name: overview.name },
             level2: {
-                upstreams: upstreams.map(n => ({ asn: n.asn, name: level2Names[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers })),
-                downstreams: downstreams.map(n => ({ asn: n.asn, name: level2Names[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers })),
+                upstreams: allUpstreams.map(n => ({ asn: n.asn, name: level2Names[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers })),
+                downstreams: allDownstreams.map(n => ({ asn: n.asn, name: level2Names[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers })),
             },
             level3: level3Data.map(d => ({
                 parentAsn: d.parentAsn,
@@ -254,7 +257,7 @@ router.get('/', async (req, res, next) => {
             name: overview.name,
             announced: overview.announced,
             type: overview.type,
-            prefixes: prefixes.slice(0, 100),
+            prefixes: prefixes, // Export all prefixes without limit
             peeringdb,
             graph,
         });
