@@ -287,13 +287,16 @@ document.addEventListener('DOMContentLoaded', () => {
             updateField(coordsEl, data.geo?.latitude ? `${data.geo.latitude}, ${data.geo.longitude}` : null);
             updateField(timezoneEl, data.geo?.timezone, geoLoader); // Hide loader on last geo field
 
-            updateField(asnNumberEl, data.asn?.number
-                ? `AS${data.asn.number}`
-                : null, null, asnErrorEl);
-            // Make ASN a clickable link to ASN Lookup
-            if (data.asn?.number && asnNumberEl) {
+            // ASN — render as clickable link if has a number (not an error object)
+            const asnNum = (data.asn && !data.asn.error) ? data.asn.number : null;
+            if (asnNum && asnNumberEl) {
+                // Reveal the hidden data container manually (updateField won't run the link path via error branch)
+                const asnContainer = asnNumberEl.closest('div:not(.loader)');
+                if (asnContainer) asnContainer.classList.remove('hidden');
                 asnNumberEl.innerHTML =
-                    `<a href="/asn?asn=${data.asn.number}" class="hover:text-purple-200 underline decoration-dotted transition-colors" title="Open ASN Lookup">AS${data.asn.number}</a>`;
+                    `<a href="/asn?asn=${asnNum}" class="hover:text-purple-200 underline decoration-dotted transition-colors" title="Open ASN Lookup">AS${asnNum}</a>`;
+            } else {
+                updateField(asnNumberEl, null, null, asnErrorEl, data.asn?.error || '-');
             }
             updateField(asnOrgEl, data.asn?.organization, asnLoader);
 

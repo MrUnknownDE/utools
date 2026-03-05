@@ -1,28 +1,52 @@
 // backend/routes/asnLookup.js
 const express = require('express');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 const pino = require('pino');
 const Sentry = require('@sentry/node');
 
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 const router = express.Router();
 
-// ─── In-Memory Cache (24h TTL) ───────────────────────────────────────────────
+// ─── Filesystem Cache (24h TTL) ───────────────────────────────────────────────
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const cache = new Map(); // key → { data, expiresAt }
+const CACHE_DIR = process.env.ASN_CACHE_DIR || path.join(__dirname, '..', 'data', 'asn-cache');
+
+// Ensure cache directory exists
+try {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+} catch (e) {
+    logger.warn({ error: e.message }, 'Could not create ASN cache directory');
+}
+
+function cacheFilePath(key) {
+    // Sanitize key to safe filename
+    return path.join(CACHE_DIR, key.replace(/[^a-zA-Z0-9_:-]/g, '_') + '.json');
+}
 
 function getCached(key) {
-    const entry = cache.get(key);
-    if (!entry) return null;
-    if (Date.now() > entry.expiresAt) {
-        cache.delete(key);
-        return null;
+    try {
+        const file = cacheFilePath(key);
+        const raw = fs.readFileSync(file, 'utf8');
+        const entry = JSON.parse(raw);
+        if (Date.now() > entry.expiresAt) {
+            fs.unlinkSync(file);
+            return null;
+        }
+        return entry.data;
+    } catch {
+        return null; // File doesn't exist or parse failed
     }
-    return entry.data;
 }
 
 function setCache(key, data) {
-    cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+    try {
+        const entry = { data, expiresAt: Date.now() + CACHE_TTL_MS };
+        fs.writeFileSync(cacheFilePath(key), JSON.stringify(entry), 'utf8');
+    } catch (e) {
+        logger.warn({ key, error: e.message }, 'ASN cache write failed');
+    }
 }
 
 // ─── HTTP Helper ──────────────────────────────────────────────────────────────
@@ -41,22 +65,18 @@ function fetchJson(url) {
                 if (res.statusCode < 200 || res.statusCode >= 300) {
                     return reject(new Error(`HTTP ${res.statusCode} from ${url}`));
                 }
-                try {
-                    resolve(JSON.parse(raw));
-                } catch (e) {
-                    reject(new Error(`JSON parse error from ${url}: ${e.message}`));
-                }
+                try { resolve(JSON.parse(raw)); }
+                catch (e) { reject(new Error(`JSON parse error: ${e.message}`)); }
             });
         });
         req.on('error', reject);
-        req.on('timeout', () => { req.destroy(); reject(new Error(`Timeout fetching ${url}`)); });
+        req.on('timeout', () => { req.destroy(); reject(new Error(`Timeout: ${url}`)); });
     });
 }
 
 // ─── ASN Validation ───────────────────────────────────────────────────────────
 function parseAsn(raw) {
     if (!raw || typeof raw !== 'string') return null;
-    // Accept "15169", "AS15169", "as15169"
     const cleaned = raw.trim().toUpperCase().replace(/^AS/, '');
     const n = parseInt(cleaned, 10);
     if (isNaN(n) || n < 1 || n > 4294967295 || String(n) !== cleaned) return null;
@@ -65,12 +85,11 @@ function parseAsn(raw) {
 
 // ─── RIPE Stat Fetchers ───────────────────────────────────────────────────────
 async function fetchOverview(asn) {
-    const cacheKey = `overview:${asn}`;
-    const cached = getCached(cacheKey);
+    const key = `overview:${asn}`;
+    const cached = getCached(key);
     if (cached) return cached;
 
-    const url = `https://stat.ripe.net/data/as-overview/data.json?resource=AS${asn}`;
-    const json = await fetchJson(url);
+    const json = await fetchJson(`https://stat.ripe.net/data/as-overview/data.json?resource=AS${asn}`);
     const d = json?.data;
     const result = {
         asn,
@@ -79,50 +98,47 @@ async function fetchOverview(asn) {
         type: d?.type || null,
         block: d?.block || null,
     };
-    setCache(cacheKey, result);
+    setCache(key, result);
     return result;
 }
 
 async function fetchNeighbours(asn) {
-    const cacheKey = `neighbours:${asn}`;
-    const cached = getCached(cacheKey);
+    const key = `neighbours:${asn}`;
+    const cached = getCached(key);
     if (cached) return cached;
 
-    const url = `https://stat.ripe.net/data/asn-neighbours/data.json?resource=AS${asn}`;
-    const json = await fetchJson(url);
+    const json = await fetchJson(`https://stat.ripe.net/data/asn-neighbours/data.json?resource=AS${asn}`);
     const neighbours = (json?.data?.neighbours || []).map(n => ({
         asn: n.asn,
-        type: n.type,         // 'left' = upstream, 'right' = downstream
+        type: n.type,       // 'left' = upstream, 'right' = downstream
         power: n.power || 0,
         v4_peers: n.v4_peers || 0,
         v6_peers: n.v6_peers || 0,
     }));
-    setCache(cacheKey, neighbours);
+    setCache(key, neighbours);
     return neighbours;
 }
 
 async function fetchPrefixes(asn) {
-    const cacheKey = `prefixes:${asn}`;
-    const cached = getCached(cacheKey);
+    const key = `prefixes:${asn}`;
+    const cached = getCached(key);
     if (cached) return cached;
 
-    const url = `https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS${asn}`;
-    const json = await fetchJson(url);
+    const json = await fetchJson(`https://stat.ripe.net/data/announced-prefixes/data.json?resource=AS${asn}`);
     const prefixes = (json?.data?.prefixes || []).map(p => p.prefix);
-    setCache(cacheKey, prefixes);
+    setCache(key, prefixes);
     return prefixes;
 }
 
 async function fetchPeeringDb(asn) {
-    const cacheKey = `peeringdb:${asn}`;
-    const cached = getCached(cacheKey);
-    if (cached) return cached;
+    const key = `peeringdb:${asn}`;
+    const cached = getCached(key);
+    if (cached !== null) return cached;
 
     try {
-        const url = `https://www.peeringdb.com/api/net?asn=${asn}&depth=2`;
-        const json = await fetchJson(url);
+        const json = await fetchJson(`https://www.peeringdb.com/api/net?asn=${asn}&depth=2`);
         const net = json?.data?.[0];
-        if (!net) { setCache(cacheKey, null); return null; }
+        if (!net) { setCache(key, null); return null; }
 
         const result = {
             peeringPolicy: net.policy_general || null,
@@ -133,14 +149,24 @@ async function fetchPeeringDb(asn) {
                 speed: ix.speed,
                 ipv4: ix.ipaddr4 || null,
                 ipv6: ix.ipaddr6 || null,
-            })).slice(0, 20), // max 20 IXPs
+            })).slice(0, 20),
         };
-        setCache(cacheKey, result);
+        setCache(key, result);
         return result;
     } catch (e) {
         logger.warn({ asn, error: e.message }, 'PeeringDB fetch failed');
         return null;
     }
+}
+
+// ─── Resolve names for a list of ASNs ────────────────────────────────────────
+async function resolveNames(asnList) {
+    const results = await Promise.allSettled(asnList.map(a => fetchOverview(a)));
+    const map = {};
+    results.forEach((r, i) => {
+        map[asnList[i]] = r.status === 'fulfilled' ? (r.value.name || null) : null;
+    });
+    return map;
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
@@ -150,13 +176,16 @@ router.get('/', async (req, res, next) => {
 
     const asn = parseAsn(String(rawAsn || ''));
     if (!asn) {
-        return res.status(400).json({ success: false, error: 'Invalid ASN. Please provide a number between 1 and 4294967295, e.g. ?asn=15169' });
+        return res.status(400).json({
+            success: false,
+            error: 'Invalid ASN. Please provide a number between 1 and 4294967295, e.g. ?asn=15169'
+        });
     }
 
     logger.info({ requestIp, asn }, 'ASN lookup request');
 
     try {
-        // Level 1 + Level 2: overview + direct neighbours + prefixes + PeeringDB (parallel)
+        // Level 1 + Level 2: fetch all base data in parallel
         const [overview, neighbours, prefixes, peeringdb] = await Promise.all([
             fetchOverview(asn),
             fetchNeighbours(asn),
@@ -164,67 +193,49 @@ router.get('/', async (req, res, next) => {
             fetchPeeringDb(asn),
         ]);
 
-        // Split neighbours into upstream (left) and downstream (right)
-        const upstreams = neighbours
-            .filter(n => n.type === 'left')
-            .sort((a, b) => b.power - a.power)
-            .slice(0, 10); // Top 10 upstreams for Level 2
+        // Split neighbours
+        const upstreams = neighbours.filter(n => n.type === 'left').sort((a, b) => b.power - a.power).slice(0, 10);
+        const downstreams = neighbours.filter(n => n.type === 'right').sort((a, b) => b.power - a.power).slice(0, 10);
 
-        const downstreams = neighbours
-            .filter(n => n.type === 'right')
-            .sort((a, b) => b.power - a.power)
-            .slice(0, 10); // Top 10 downstreams for Level 2
+        // Resolve names for ALL Level 2 nodes (both upstreams and downstreams)
+        const level2Asns = [...new Set([...upstreams, ...downstreams].map(n => n.asn))];
+        const level2Names = await resolveNames(level2Asns);
 
-        // Level 3: fetch upstreams of upstreams (top 5 of Level 2 upstreams only)
+        // Level 3: fetch upstreams-of-upstreams for top 5 Level 2 upstreams
         const level3Raw = await Promise.allSettled(
             upstreams.slice(0, 5).map(async (upstreamNode) => {
                 const theirNeighbours = await fetchNeighbours(upstreamNode.asn);
-                const overviewResult = await fetchOverview(upstreamNode.asn);
-                // Their upstreams (left) = Level 3
                 const theirUpstreams = theirNeighbours
                     .filter(n => n.type === 'left')
                     .sort((a, b) => b.power - a.power)
-                    .slice(0, 3); // Top 3 per Level-2 upstream
-                return {
-                    parentAsn: upstreamNode.asn,
-                    parentName: overviewResult.name,
-                    theirUpstreams,
-                };
+                    .slice(0, 3);
+                return { parentAsn: upstreamNode.asn, theirUpstreams };
             })
         );
 
-        // Collect Level 3 nodes, resolve names for them
         const level3Data = level3Raw
             .filter(r => r.status === 'fulfilled')
             .map(r => r.value);
 
-        // Flatten all unique Level 3 ASNs and fetch their names
-        const level3Asns = [...new Set(
-            level3Data.flatMap(d => d.theirUpstreams.map(n => n.asn))
-        )];
-        const level3Names = await Promise.allSettled(
-            level3Asns.map(a => fetchOverview(a))
-        );
-        const asnNameMap = {};
-        level3Names.forEach((r, i) => {
-            if (r.status === 'fulfilled') asnNameMap[level3Asns[i]] = r.value.name;
-        });
-        // Also include Level 2 names
-        [...upstreams, ...downstreams].forEach(n => {
-            if (!asnNameMap[n.asn]) asnNameMap[n.asn] = null;
-        });
+        // Resolve names for Level 3 nodes
+        const level3Asns = [...new Set(level3Data.flatMap(d => d.theirUpstreams.map(n => n.asn)))];
+        const level3Names = await resolveNames(level3Asns);
 
-        // Build graph structure for frontend
+        // ── Build graph ───────────────────────────────────────────────────────
         const graph = {
             center: { asn, name: overview.name },
             level2: {
-                upstreams: upstreams.map(n => ({ asn: n.asn, name: asnNameMap[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers })),
-                downstreams: downstreams.map(n => ({ asn: n.asn, name: asnNameMap[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers })),
+                upstreams: upstreams.map(n => ({ asn: n.asn, name: level2Names[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers })),
+                downstreams: downstreams.map(n => ({ asn: n.asn, name: level2Names[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers })),
             },
             level3: level3Data.map(d => ({
                 parentAsn: d.parentAsn,
-                parentName: d.parentName,
-                upstreams: d.theirUpstreams.map(n => ({ asn: n.asn, name: asnNameMap[n.asn] || null, power: n.power })),
+                parentName: level2Names[d.parentAsn] || null,
+                upstreams: d.theirUpstreams.map(n => ({
+                    asn: n.asn,
+                    name: level3Names[n.asn] || null,
+                    power: n.power,
+                })),
             })),
         };
 
@@ -234,7 +245,7 @@ router.get('/', async (req, res, next) => {
             name: overview.name,
             announced: overview.announced,
             type: overview.type,
-            prefixes: prefixes.slice(0, 100), // max 100 prefixes
+            prefixes: prefixes.slice(0, 100),
             peeringdb,
             graph,
         });
