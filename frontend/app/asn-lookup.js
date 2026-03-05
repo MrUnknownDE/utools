@@ -75,6 +75,7 @@ async function doLookup(rawAsn) {
 
 // ─── Render ───────────────────────────────────────────────────────────────────
 function renderResults(data) {
+    // Show results FIRST so the graph container has real dimensions (clientWidth > 0)
     loadingSection.classList.add('hidden');
     resultsSection.classList.remove('hidden');
     // Reset loading hint for next lookup
@@ -87,33 +88,33 @@ function renderResults(data) {
     document.getElementById('res-name').textContent = data.name || 'Unknown';
 
     const announcedBadge = document.getElementById('res-announced-badge');
-    if (data.announced) announcedBadge.classList.remove('hidden');
-    else announcedBadge.classList.add('hidden');
+    if (announcedBadge) {
+        if (data.announced) announcedBadge.classList.remove('hidden');
+        else announcedBadge.classList.add('hidden');
+    }
 
     const typeBadge = document.getElementById('res-type-badge');
-    typeBadge.textContent = data.type || '';
-    typeBadge.classList.toggle('hidden', !data.type);
+    if (typeBadge) {
+        typeBadge.textContent = data.type || '';
+        typeBadge.classList.toggle('hidden', !data.type);
+    }
 
     const peeringPolicy = data.peeringdb?.peeringPolicy;
     document.getElementById('res-policy').textContent =
         peeringPolicy ? `Peering Policy: ${peeringPolicy}` : '';
 
-    document.getElementById('res-upstream-count').textContent = data.graph.level2.upstreams.length;
-    document.getElementById('res-downstream-count').textContent = data.graph.level2.downstreams.length;
-    document.getElementById('res-prefix-count').textContent = data.prefixes.length;
+    document.getElementById('res-upstream-count').textContent = data.graph?.level2?.upstreams?.length ?? '?';
+    document.getElementById('res-downstream-count').textContent = data.graph?.level2?.downstreams?.length ?? '?';
+    document.getElementById('res-prefix-count').textContent = data.prefixes?.length ?? '?';
 
-    // Graph
-    renderGraph(data.graph);
-
-    // Prefixes
+    // Prefixes + IXPs (before graph — these are cheap)
     renderPrefixes(data.prefixes);
-
-    // IXPs
     renderIxps(data.peeringdb?.ixps);
+    renderNeighbourTable('upstream-table', data.graph?.level2?.upstreams ?? [], 'blue');
+    renderNeighbourTable('downstream-table', data.graph?.level2?.downstreams ?? [], 'green');
 
-    // Neighbour tables
-    renderNeighbourTable('upstream-table', data.graph.level2.upstreams, 'blue');
-    renderNeighbourTable('downstream-table', data.graph.level2.downstreams, 'green');
+    // Graph LAST — needs the container to be visible for clientWidth
+    if (data.graph) renderGraph(data.graph);
 }
 
 // ─── Prefix List ─────────────────────────────────────────────────────────────
