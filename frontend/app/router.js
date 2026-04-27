@@ -15,7 +15,17 @@ const routes = {
 };
 
 const app = document.getElementById('app');
+const header = document.querySelector('header');
 let currentCleanup = null;
+
+// ── Hamburger toggle ─────────────────────────────────────────────
+const navToggle = document.getElementById('nav-toggle');
+if (navToggle) {
+  navToggle.addEventListener('click', () => {
+    const open = header.classList.toggle('nav-open');
+    navToggle.setAttribute('aria-expanded', open);
+  });
+}
 
 function setActiveNav(path) {
   document.querySelectorAll('nav a').forEach(a => {
@@ -28,6 +38,9 @@ function setActiveNav(path) {
 
 async function navigate(path, { push = true, search = '' } = {}) {
   const route = routes[path] ?? routes['/'];
+
+  // ── close mobile nav on navigate ────────────────────────────
+  if (header) { header.classList.remove('nav-open'); navToggle?.setAttribute('aria-expanded', 'false'); }
 
   // ── leave animation ──────────────────────────────────────────
   app.classList.add('page-leaving');

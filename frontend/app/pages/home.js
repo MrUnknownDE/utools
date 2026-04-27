@@ -421,18 +421,14 @@ export const page = {
       let ipToLookup = query;
       if (!isValidIp(query)) {
         try {
-          const r    = await fetch(`${API}/dns-lookup?domain=${encodeURIComponent(query)}&type=A`);
+          const r    = await fetch(`${API}/dns-lookup?domain=${encodeURIComponent(query)}&type=ANY`);
           const data = await r.json();
-          if (r.ok && data.success && data.records?.length) {
-            ipToLookup = Array.isArray(data.records) ? data.records[0] : data.records;
+          if (r.ok && data.success) {
+            const ip = data.records?.A?.[0] ?? data.records?.AAAA?.[0];
+            if (ip) ipToLookup = ip;
+            else throw new Error('No A or AAAA records found.');
           } else {
-            const r2    = await fetch(`${API}/dns-lookup?domain=${encodeURIComponent(query)}&type=AAAA`);
-            const data2 = await r2.json();
-            if (r2.ok && data2.success && data2.records?.length) {
-              ipToLookup = Array.isArray(data2.records) ? data2.records[0] : data2.records;
-            } else {
-              throw new Error(data.error || 'No A or AAAA records found.');
-            }
+            throw new Error(data.error || 'DNS lookup failed.');
           }
         } catch (err) {
           lookupErrorEl.textContent = `Error: Could not resolve domain — ${err.message}`;

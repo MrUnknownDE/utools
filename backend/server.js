@@ -5,21 +5,13 @@ const Sentry = require("@sentry/node");
 
 // Initialize Sentry BEFORE requiring any other modules!
 Sentry.init({
-    // DSN should now be available from process.env if set in .env
-    dsn: process.env.SENTRY_DSN || "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@oooooooooooooooo.ingest.sentry.io/123456",
-    // Enable tracing - Adjust sample rate as needed
+    dsn: process.env.SENTRY_DSN,
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
     integrations: [
-        // send console.log, console.warn, and console.error calls as logs to Sentry
-        Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }),
+        Sentry.consoleLoggingIntegration({ levels: ["warn", "error"] }),
     ],
-    // Enable logs to be sent to Sentry
     enableLogs: true,
 });
-
-// DEBUG: Check Sentry object after init
-console.log("Sentry object after init:", typeof Sentry, Sentry ? Object.keys(Sentry) : 'Sentry is undefined/null');
-// --- Ende Sentry Initialisierung ---
 
 
 // Require necessary core modules AFTER Sentry is initialized
@@ -53,20 +45,6 @@ const logger = pino({
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- Sentry Middleware (Request Handler & Tracing) ---
-// Must be the first middleware
-if (Sentry.Handlers && Sentry.Handlers.requestHandler) {
-    app.use(Sentry.Handlers.requestHandler());
-} else {
-    logger.error("Sentry.Handlers.requestHandler is not available!");
-}
-// Must be after requestHandler, before routes
-if (Sentry.Handlers && Sentry.Handlers.tracingHandler) {
-    app.use(Sentry.Handlers.tracingHandler());
-} else {
-    logger.error("Sentry.Handlers.tracingHandler is not available!");
-}
-// --- Ende Sentry Middleware ---
 
 
 // --- Core Middleware ---
@@ -112,23 +90,8 @@ app.use('/api/mac-lookup', macLookupRoutes);
 app.use('/api/asn-lookup', asnLookupRoutes);
 
 
-// --- Sentry Error Handler ---
-// Must be AFTER all controllers and BEFORE any other error handling middleware
-if (Sentry.Handlers && Sentry.Handlers.errorHandler) {
-    app.use(Sentry.Handlers.errorHandler({
-        shouldHandleError(error) {
-            // Capture all 500 errors
-            if (error.status === 500) return true;
-            // Capture specific client errors if needed, e.g., 403
-            // if (error.status === 403) return true;
-            // By default, capture only server errors (5xx)
-            return error.status >= 500;
-        },
-    }));
-} else {
-    logger.error("Sentry.Handlers.errorHandler is not available!");
-}
-// --- Ende Sentry Error Handler ---
+// Sentry error handler — must be after routes, before custom error handler
+Sentry.setupExpressErrorHandler(app);
 
 
 // --- Fallback Error Handler ---
