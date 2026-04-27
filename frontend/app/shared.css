@@ -156,7 +156,7 @@ header.nav-open #main-nav { display: block; }
 
 /* ── Desktop nav ───────────────────────────────────────────────── */
 @media (min-width: 768px) {
-  header { flex-direction: row; align-items: center; gap: 1rem; }
+  header { flex-direction: row; align-items: center; justify-content: space-between; gap: 1rem; }
   .header-top { flex: 0 0 auto; }
   .nav-toggle { display: none; }
   #main-nav { display: block !important; padding-top: 0; margin-top: 0; border-top: none; }
