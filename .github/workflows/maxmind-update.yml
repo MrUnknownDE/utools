@@ -1,14 +1,13 @@
 name: Update MaxMind GeoLite2 DBs
 
 on:
-  workflow_dispatch: # Ermöglicht manuelles Starten
+  workflow_dispatch:
   schedule:
     - cron: '0 0 1 * *'
 
 jobs:
   update-db:
     runs-on: ubuntu-latest
-    # Berechtigung, um Änderungen zurück ins Repo zu pushen
     permissions:
       contents: write
 
@@ -16,71 +15,46 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          lfs: true # Wichtig: LFS-Dateien beim Checkout herunterladen
+          lfs: true
 
-      - name: Download geoipupdate tool
+      - name: Download latest geoipupdate
         run: |
-          # Lade eine spezifische Version oder die neueste herunter
-          GEOIPUPDATE_VERSION="4.11.1"
-          wget "https://github.com/maxmind/geoipupdate/releases/download/v${GEOIPUPDATE_VERSION}/geoipupdate_${GEOIPUPDATE_VERSION}_linux_amd64.tar.gz"
-          tar -zxvf "geoipupdate_${GEOIPUPDATE_VERSION}_linux_amd64.tar.gz"
-          # Verschiebe das Binary in einen bekannten Pfad und mache es ausführbar
+          GEOIPUPDATE_VERSION=$(curl -fsSL https://api.github.com/repos/maxmind/geoipupdate/releases/latest | jq -r '.tag_name | ltrimstr("v")')
+          echo "Installing geoipupdate v${GEOIPUPDATE_VERSION}"
+          wget -q "https://github.com/maxmind/geoipupdate/releases/download/v${GEOIPUPDATE_VERSION}/geoipupdate_${GEOIPUPDATE_VERSION}_linux_amd64.tar.gz"
+          tar -xzf "geoipupdate_${GEOIPUPDATE_VERSION}_linux_amd64.tar.gz"
           sudo mv "geoipupdate_${GEOIPUPDATE_VERSION}_linux_amd64/geoipupdate" /usr/local/bin/
-          sudo chmod +x /usr/local/bin/geoipupdate
-          # Überprüfe die Version
           geoipupdate -V
 
       - name: Create GeoIP.conf
-        # Erstellt die Konfigurationsdatei für geoipupdate mit den Secrets
         run: |
-          echo "Creating GeoIP.conf..."
           cat << EOF > GeoIP.conf
-          # GeoIP.conf file for geoipupdate
           AccountID ${{ secrets.MAXMIND_ACCOUNT_ID }}
           LicenseKey ${{ secrets.MAXMIND_LICENSE_KEY }}
-
-          # Specify the editions to download
           EditionIDs GeoLite2-ASN GeoLite2-City
           EOF
-          echo "GeoIP.conf created."
         env:
           MAXMIND_ACCOUNT_ID: ${{ secrets.MAXMIND_ACCOUNT_ID }}
           MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
 
       - name: Run geoipupdate
-        run: |
-          echo "Running geoipupdate..."
-          # Lädt die Datenbanken nach ./backend/data herunter
-          geoipupdate -f GeoIP.conf -d ./backend/data -v
-          echo "geoipupdate finished."
+        run: geoipupdate -f GeoIP.conf -d ./backend/data -v
 
       - name: Configure Git and LFS
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          # Installiere Git LFS Hooks für diesen Run
           git lfs install
 
-      - name: Track and Commit changes (LFS)
+      - name: Commit and push updated databases
         run: |
-          # Sage Git, dass .mmdb Dateien mit LFS verwaltet werden sollen
           git lfs track "backend/data/*.mmdb"
-          
-          # Füge .gitattributes (hier steht die LFS-Konfiguration drin) hinzu
-          git add .gitattributes
-          
-          # Füge die eigentlichen Datenbank-Dateien hinzu
-          git add ./backend/data/*.mmdb
-
-          # Prüfe, ob Änderungen zum Committen vorliegen (staged changes)
+          git add .gitattributes ./backend/data/*.mmdb
           if git diff --staged --quiet; then
             echo "No changes detected in MaxMind databases."
           else
-            echo "Changes detected. Committing..."
-            COMMIT_DATE=$(date -u +"%Y-%m-%d")
-            git commit -m "Update MaxMind GeoLite2 databases (LFS) (${COMMIT_DATE})"
+            git commit -m "Update MaxMind GeoLite2 databases (LFS) ($(date -u +%Y-%m-%d))"
             git push
-            echo "Changes pushed via LFS."
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

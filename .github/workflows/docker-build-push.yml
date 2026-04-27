@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          lfs: true # WICHTIG: Lädt die echten LFS-Dateien (MaxMind DBs) herunter
+          lfs: true
 
       - name: Get short SHA
         id: vars
@@ -58,6 +58,8 @@ jobs:
           build-args: |
             GIT_COMMIT_SHA=${{ steps.vars.outputs.sha }}
             SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
 
       - name: Tag backend with extra_tag (manifest retag)
         if: ${{ github.event.inputs.extra_tag && github.event.inputs.extra_tag != '' }}
@@ -80,6 +82,8 @@ jobs:
           build-args: |
             GIT_COMMIT_SHA=${{ steps.vars.outputs.sha }}
             SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
       - name: Tag frontend with extra_tag (manifest retag)
         if: ${{ github.event.inputs.extra_tag && github.event.inputs.extra_tag != '' }}

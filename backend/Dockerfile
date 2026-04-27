@@ -14,8 +14,7 @@ COPY package*.json ./
 
 # Install app dependencies using npm ci for faster, reliable builds
 # --only=production installs only production dependencies (including 'oui')
-RUN npm ci --only=production
-# REMOVED: RUN npm i oui (should be installed by npm ci now)
+RUN npm ci --omit=dev
 
 # Stage 2: Production Image
 FROM node:24-alpine
