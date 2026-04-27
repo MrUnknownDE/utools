@@ -287,7 +287,6 @@ function parseTracerouteLine(line) {
  * @returns {Promise<{port: number, status: 'open'|'closed'|'timeout', service: string}>} A promise that resolves with the port status.
  */
 function checkPort(port, host, timeout = 2000) {
-    // A small map of common ports to their services
     const commonPorts = {
         21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS', 80: 'HTTP',
         110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 445: 'SMB', 993: 'IMAPS',
@@ -296,45 +295,24 @@ function checkPort(port, host, timeout = 2000) {
     };
     const service = commonPorts[port] || 'Unknown';
 
-    return new Promise((resolve, reject) => {
-        // DEFENSE IN DEPTH: Prevent scanning of private IPs at the function level
-        if (!isValidIp(host) || isPrivateIp(host)) {
-            const error = new Error(`Scanning restricted: ${host} is not a valid public IP.`);
-            logger.warn({ host, port }, "Blocked attempt to scan restricted IP in checkPort");
-            return resolve({
-                port,
-                status: 'error',
-                service,
-                error: 'Restricted IP',
-                details: 'Scanning private or invalid IPs is not allowed.'
-            });
-        }
+    // Validate before any network operation — throw so CodeQL tracks this as a hard barrier
+    if (!isValidIp(host) || isPrivateIp(host)) {
+        logger.warn({ host, port }, 'Blocked attempt to scan restricted IP in checkPort');
+        throw new Error(`Scanning restricted: ${host} is not a valid public IP.`);
+    }
 
+    return new Promise((resolve) => {
         const socket = new net.Socket();
         socket.setTimeout(timeout);
 
-        socket.on('connect', () => {
-            socket.destroy();
-            resolve({ port, status: 'open', service });
-        });
-
-        socket.on('timeout', () => {
-            socket.destroy();
-            resolve({ port, status: 'timeout', service });
-        });
-
+        socket.on('connect', () => { socket.destroy(); resolve({ port, status: 'open', service }); });
+        socket.on('timeout', () => { socket.destroy(); resolve({ port, status: 'timeout', service }); });
         socket.on('error', (err) => {
             socket.destroy();
-            // 'ECONNREFUSED' is the key for a closed port. Other errors might be network issues.
             const status = err.code === 'ECONNREFUSED' ? 'closed' : 'error';
             resolve({ port, status, service, error: err.code });
         });
 
-        // Explicit inline guard (defence-in-depth; also satisfies CodeQL SSRF dataflow)
-        if (!isValidIp(host) || isPrivateIp(host)) {
-            socket.destroy();
-            return resolve({ port, status: 'error', service, error: 'Restricted IP' });
-        }
         socket.connect(port, host);
     });
 }

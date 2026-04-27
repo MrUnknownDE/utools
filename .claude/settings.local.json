@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /c/Users/unknown/Documents/Github/utools log --oneline)",
+      "Bash(gh api *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('rule',{}\\).get\\('description',''\\), '\\\\n', d.get\\('most_recent_instance',{}\\).get\\('location',{}\\), '\\\\n', d.get\\('rule',{}\\).get\\('id',''\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); a=d['security_advisory']; print\\(a['summary'], '\\\\nPackage:', d['dependency']['package']['name'], '\\\\nVulnerable:', a['vulnerabilities'][0]['vulnerable_version_range'], '\\\\nFixed:', a['vulnerabilities'][0]['first_patched_version']['identifier'] if a['vulnerabilities'][0].get\\('first_patched_version'\\) else 'N/A', '\\\\nSeverity:', a['severity']\\)\" gh api repos/MrUnknownDE/utools/dependabot/alerts/6)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); a=d['security_advisory']; print\\(a['summary'], '\\\\nPackage:', d['dependency']['package']['name'], '\\\\nVulnerable:', a['vulnerabilities'][0]['vulnerable_version_range'], '\\\\nFixed:', a['vulnerabilities'][0]['first_patched_version']['identifier'] if a['vulnerabilities'][0].get\\('first_patched_version'\\) else 'N/A', '\\\\nSeverity:', a['severity']\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('most_recent_instance',{}\\), indent=2\\)\\)\")",
+      "Bash(npm ls *)"
+    ]
+  }
+}

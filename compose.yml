@@ -4,6 +4,7 @@ services:
     image: mrunknownde/utools-backend
     container_name: utools_backend
     restart: unless-stopped
+    user: "0"   # Run as root so ASN cache volume is writable
     environment:
       NODE_ENV: production
       PORT: 3000
