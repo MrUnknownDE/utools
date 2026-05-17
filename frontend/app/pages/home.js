@@ -31,9 +31,21 @@ export const page = {
           <span id="ipv6-address" class="font-mono text-blue-300 text-sm break-all"></span>
           <button id="copy-ipv6-btn" class="copy-btn hidden">copy</button>
         </div>
-        <!-- Privacy / risk flags -->
-        <div id="privacy-flags" class="hidden mt-3 flex flex-wrap gap-1.5"></div>
-        <div id="privacy-loader" class="loader mt-3" style="width:16px;height:16px;border-width:2px"></div>
+        <!-- Privacy / risk flags — dual-stack: always show both rows -->
+        <div id="privacy-checks" class="mt-3 space-y-1.5">
+          <div class="flex items-center gap-2 min-h-[22px]">
+            <span class="text-xs font-bold text-gray-500 uppercase tracking-wider w-10 shrink-0">IPv4</span>
+            <div id="privacy-flags-v4" class="flex flex-wrap gap-1.5 items-center">
+              <div id="privacy-loader-v4" class="loader" style="width:12px;height:12px;border-width:2px"></div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 min-h-[22px]">
+            <span class="text-xs font-bold text-blue-400/60 uppercase tracking-wider w-10 shrink-0">IPv6</span>
+            <div id="privacy-flags-v6" class="flex flex-wrap gap-1.5 items-center">
+              <span class="text-xs text-gray-600 italic">detecting…</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="glass-card rounded-lg p-5 space-y-4">
@@ -474,19 +486,28 @@ export const page = {
 
     // ── IPv6 detection ───────────────────────────────────────────
     async function checkIPv6() {
-      const ctrl  = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 4000);
+      const ctrl     = new AbortController();
+      const timer    = setTimeout(() => ctrl.abort(), 4000);
+      const v6Flags  = document.getElementById('privacy-flags-v6');
       try {
         const r   = await fetch('https://ipv6.icanhazip.com', { signal: ctrl.signal });
         const ip6 = r.ok ? (await r.text()).trim() : null;
-        if (ip6 && ip6.includes(':')) {
+        if (ip6 && ip6.includes(':') && ip6 !== currentIp) {
+          // Separate IPv6 address — show it and run its own privacy check
           document.getElementById('ipv6-address').textContent = ip6;
-          const row = document.getElementById('ipv6-row');
-          row.classList.remove('hidden');
+          document.getElementById('ipv6-row').classList.remove('hidden');
           copyIpv6Btn.classList.remove('hidden');
+          if (v6Flags) v6Flags.innerHTML = '<div id="privacy-loader-v6" class="loader" style="width:12px;height:12px;border-width:2px"></div>';
+          fetchPrivacyFlags(ip6, 6);
+        } else {
+          // No IPv6, timed out, or same exit as IPv4 (VPN tunnels both)
+          if (v6Flags) v6Flags.innerHTML = '<span class="text-xs text-gray-600">N/A</span>';
         }
-      } catch { /* no IPv6 or timeout — show nothing */ }
-      finally { clearTimeout(timer); }
+      } catch {
+        if (v6Flags) v6Flags.innerHTML = '<span class="text-xs text-gray-600">N/A</span>';
+      } finally {
+        clearTimeout(timer);
+      }
     }
 
     // ── Privacy / risk flags ──────────────────────────────────────
@@ -497,19 +518,25 @@ export const page = {
       red:    'bg-red-900/40 text-red-300 border border-red-700/50',
     };
 
-    async function fetchPrivacyFlags(ip) {
-      const loader    = document.getElementById('privacy-loader');
-      const container = document.getElementById('privacy-flags');
+    async function fetchPrivacyFlags(ip, version = 4) {
+      const container = document.getElementById(`privacy-flags-v${version}`);
+      const loader    = document.getElementById(`privacy-loader-v${version}`);
+      if (!container) return;
       try {
         const r    = await fetch(`${API}/privacy/${encodeURIComponent(ip)}`);
         const data = await r.json();
-        if (!data.flags?.length) return;
+        loader?.remove();
+        if (!data.flags?.length) {
+          container.innerHTML = '<span class="text-xs text-gray-600">—</span>';
+          return;
+        }
         container.innerHTML = data.flags.map(f =>
           `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${FLAG_COLORS[f.color] || FLAG_COLORS.green}">${f.label}</span>`
         ).join('');
-        container.classList.remove('hidden');
-      } catch { /* silent fail */ }
-      finally { loader?.classList.add('hidden'); }
+      } catch {
+        loader?.remove();
+        container.innerHTML = '<span class="text-xs text-gray-600">N/A</span>';
+      }
     }
 
     // ── Browser fingerprint ───────────────────────────────────────
@@ -572,7 +599,7 @@ export const page = {
         if (!r.ok) throw new Error(`${r.statusText} (${r.status})`);
         const data = await r.json();
         currentIp = data.ip;
-        fetchPrivacyFlags(data.ip);
+        fetchPrivacyFlags(data.ip, 4);
 
         ipAddressSpan.textContent = data.ip;
         ipAddressLink.classList.remove('hidden');
@@ -941,8 +968,7 @@ export const page = {
 
     // ── Bootstrap ────────────────────────────────────────────────
     populateBrowserFingerprint();
-    checkIPv6();
-    fetchIpInfo();
+    fetchIpInfo().then(() => checkIPv6());
 
     const params = new URLSearchParams(search);
     const ipParam = params.get('ip');

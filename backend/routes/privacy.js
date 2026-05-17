@@ -8,9 +8,10 @@ const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 // ASN org-name patterns that strongly suggest a VPN service
 const VPN_PATTERNS = [
-  /\bvpn\b/i, /nordvpn/i, /expressvpn/i, /mullvad/i, /surfshark/i,
-  /protonvpn/i, /cyberghost/i, /ipvanish/i, /purevpn/i, /tunnelbear/i,
-  /private.?internet.?access/i, /\bpia\b/i, /hide\.?my\.?ip/i, /hidemyass/i,
+  /\bvpn\b/i, /nordvpn/i, /expressvpn/i, /mullvad/i, /31173\s+services/i,
+  /owl\s+limited/i, /surfshark/i, /protonvpn/i, /cyberghost/i, /ipvanish/i,
+  /purevpn/i, /tunnelbear/i, /private.?internet.?access/i, /\bpia\b/i,
+  /hide\.?my\.?ip/i, /hidemyass/i, /windscribe/i, /perfect.?privacy/i,
 ];
 
 // ASN org-name patterns that suggest cloud/datacenter/hosting (but not necessarily VPN)
@@ -58,7 +59,10 @@ router.get('/:ip', async (req, res, next) => {
 
     // Tor exit-node check (async DNS, ~100–300 ms)
     const tor = await isTorExit(ip);
-    if (tor) flags.push({ id: 'tor', label: 'Tor Exit Node', color: 'red' });
+    if (tor) {
+      flags.length = 0; // Tor supersedes all network-type flags — showing "Residential" alongside Tor is misleading
+      flags.push({ id: 'tor', label: 'Tor Exit Node', color: 'red' });
+    }
 
     logger.info({ ip, flags: flags.map(f => f.id) }, 'Privacy check complete');
     res.json({ success: true, ip, flags });
