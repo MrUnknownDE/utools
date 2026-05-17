@@ -27,6 +27,7 @@
     "whois-json": "^2.0.4"
   },
   "overrides": {
-    "underscore": "1.13.8"
+    "underscore": ">=1.13.8",
+    "ip-address": ">=10.2.0"
   }
 }
