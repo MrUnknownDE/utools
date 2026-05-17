@@ -484,32 +484,6 @@ export const page = {
     const syncLookupBtn = () => { lookupBtn.disabled = !lookupInput.value.trim(); };
     lookupInput.addEventListener('input', syncLookupBtn);
 
-    // ── IPv6 detection ───────────────────────────────────────────
-    async function checkIPv6() {
-      const ctrl     = new AbortController();
-      const timer    = setTimeout(() => ctrl.abort(), 4000);
-      const v6Flags  = document.getElementById('privacy-flags-v6');
-      try {
-        const r   = await fetch('https://ipv6.icanhazip.com', { signal: ctrl.signal });
-        const ip6 = r.ok ? (await r.text()).trim() : null;
-        if (ip6 && ip6.includes(':') && ip6 !== currentIp) {
-          // Separate IPv6 address — show it and run its own privacy check
-          document.getElementById('ipv6-address').textContent = ip6;
-          document.getElementById('ipv6-row').classList.remove('hidden');
-          copyIpv6Btn.classList.remove('hidden');
-          if (v6Flags) v6Flags.innerHTML = '<div id="privacy-loader-v6" class="loader" style="width:12px;height:12px;border-width:2px"></div>';
-          fetchPrivacyFlags(ip6, 6);
-        } else {
-          // No IPv6, timed out, or same exit as IPv4 (VPN tunnels both)
-          if (v6Flags) v6Flags.innerHTML = '<span class="text-xs text-gray-600">N/A</span>';
-        }
-      } catch {
-        if (v6Flags) v6Flags.innerHTML = '<span class="text-xs text-gray-600">N/A</span>';
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-
     // ── Privacy / risk flags ──────────────────────────────────────
     const FLAG_COLORS = {
       green:  'bg-green-900/40 text-green-300 border border-green-700/50',
@@ -594,47 +568,112 @@ export const page = {
       mapEl.classList.add('hidden');
       mapMessage.classList.add('hidden');
 
+      // Force-detect via protocol-specific subdomains (ipv4./ipv6. have A-only / AAAA-only DNS)
+      async function forceDetect(url) {
+        const ctrl  = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 4000);
+        try {
+          const r = await fetch(url, { signal: ctrl.signal });
+          if (!r.ok) return null;
+          const d = await r.json();
+          return d.ip || null;
+        } catch { return null; }
+        finally { clearTimeout(timer); }
+      }
+
+      function setPrivacyNA(version) {
+        const el = document.getElementById(`privacy-flags-v${version}`);
+        if (el) { document.getElementById(`privacy-loader-v${version}`)?.remove(); el.innerHTML = '<span class="text-xs text-gray-600">N/A</span>'; }
+      }
+
+      // Use current hostname so it works for any deployment (utools.mrunk.de → ipv4.utools.mrunk.de)
+      const host = location.hostname;
+      const [ipv4, ipv6] = await Promise.all([
+        forceDetect(`https://ipv4.${host}/api/myip`),
+        forceDetect(`https://ipv6.${host}/api/myip`),
+      ]);
+
+      const hasSeperateIPv6 = !!(ipv4 && ipv6 && ipv4 !== ipv6);
+      const primaryIp       = ipv4 || ipv6;
+
+      // Fetch geo / ASN / rDNS — use /api/lookup for detected IP, /api/ipinfo as fallback
+      let data;
       try {
-        const r    = await fetch(`${API}/ipinfo`);
-        if (!r.ok) throw new Error(`${r.statusText} (${r.status})`);
-        const data = await r.json();
-        currentIp = data.ip;
-        fetchPrivacyFlags(data.ip, 4);
-
-        ipAddressSpan.textContent = data.ip;
-        ipAddressLink.classList.remove('hidden');
-        copyIpBtn.classList.remove('hidden');
-        ipLoader.classList.add('hidden');
-        ipAddressLink.addEventListener('click', e => {
-          e.preventDefault();
-          if (currentIp) window._router.navigate('/whois', { query: currentIp });
-        });
-
-        updateField(document.getElementById('country'), data.geo?.countryName ? `${data.geo.countryName} (${data.geo.country})` : null, null, document.getElementById('geo-error'));
-        updateField(document.getElementById('region'), data.geo?.region);
-        updateField(document.getElementById('city'), data.geo?.city);
-        updateField(document.getElementById('postal'), data.geo?.postalCode);
-        updateField(document.getElementById('coords'), data.geo?.latitude ? `${data.geo.latitude}, ${data.geo.longitude}` : null);
-        updateField(document.getElementById('timezone'), data.geo?.timezone, geoLoader);
-
-        const asnNum = (data.asn && !data.asn.error) ? data.asn.number : null;
-        if (asnNum) {
-          const asnContainer = document.getElementById('asn-number')?.closest('div:not(.loader)');
-          if (asnContainer) asnContainer.classList.remove('hidden');
-          document.getElementById('asn-number').innerHTML =
-            `<a href="/asn?asn=${asnNum}" class="hover:text-purple-200 underline decoration-dotted transition-colors" title="Open ASN Lookup">AS${asnNum}</a>`;
+        if (primaryIp) {
+          const r = await fetch(`${API}/lookup?targetIp=${encodeURIComponent(primaryIp)}`);
+          if (!r.ok) throw new Error(`${r.statusText} (${r.status})`);
+          data = await r.json();
+          data.ip = primaryIp;
         } else {
-          updateField(document.getElementById('asn-number'), null, null, document.getElementById('asn-error'), data.asn?.error || '-');
+          // Local dev / subdomains not reachable — fall back to auto-detect
+          const r = await fetch(`${API}/ipinfo`);
+          if (!r.ok) throw new Error(`${r.statusText} (${r.status})`);
+          data = await r.json();
         }
-        updateField(document.getElementById('asn-org'), data.asn?.organization, asnLoader);
-        updateRdns(document.getElementById('rdns-list'), data.rdns, rdnsLoader, document.getElementById('rdns-error'));
-        initOrUpdateMap('map', data.geo?.latitude, data.geo?.longitude, mapEl, mapLoader, mapMessage);
-
       } catch (err) {
         console.error('Failed to fetch IP info:', err);
         showGlobalErr(`Could not load IP information. ${err.message}`);
         [ipLoader, geoLoader, asnLoader, rdnsLoader, mapLoader].forEach(l => l?.classList.add('hidden'));
+        return;
       }
+
+      currentIp = data.ip;
+
+      // Show primary IP
+      ipAddressSpan.textContent = data.ip;
+      ipAddressLink.classList.remove('hidden');
+      copyIpBtn.classList.remove('hidden');
+      ipLoader.classList.add('hidden');
+      ipAddressLink.onclick = e => {
+        e.preventDefault();
+        window._router.navigate('/whois', { query: currentIp });
+      };
+
+      // IPv6 row — only when a separate IPv6 was detected alongside IPv4
+      if (hasSeperateIPv6) {
+        document.getElementById('ipv6-address').textContent = ipv6;
+        document.getElementById('ipv6-row').classList.remove('hidden');
+        copyIpv6Btn.classList.remove('hidden');
+      }
+
+      // Privacy checks — each slot gets the correct IP or N/A
+      const v4ForPrivacy = ipv4 || (!data.ip.includes(':') ? data.ip : null);
+      const v6ForPrivacy = hasSeperateIPv6 ? ipv6 : (data.ip.includes(':') ? data.ip : null);
+
+      if (v4ForPrivacy) {
+        fetchPrivacyFlags(v4ForPrivacy, 4);
+      } else {
+        setPrivacyNA(4);
+      }
+
+      if (v6ForPrivacy) {
+        const v6El = document.getElementById('privacy-flags-v6');
+        if (v6El) v6El.innerHTML = '<div id="privacy-loader-v6" class="loader" style="width:12px;height:12px;border-width:2px"></div>';
+        fetchPrivacyFlags(v6ForPrivacy, 6);
+      } else {
+        setPrivacyNA(6);
+      }
+
+      // Populate geo / ASN / rDNS / map
+      updateField(document.getElementById('country'), data.geo?.countryName ? `${data.geo.countryName} (${data.geo.country})` : null, null, document.getElementById('geo-error'));
+      updateField(document.getElementById('region'), data.geo?.region);
+      updateField(document.getElementById('city'), data.geo?.city);
+      updateField(document.getElementById('postal'), data.geo?.postalCode);
+      updateField(document.getElementById('coords'), data.geo?.latitude ? `${data.geo.latitude}, ${data.geo.longitude}` : null);
+      updateField(document.getElementById('timezone'), data.geo?.timezone, geoLoader);
+
+      const asnNum = (data.asn && !data.asn.error) ? data.asn.number : null;
+      if (asnNum) {
+        const asnContainer = document.getElementById('asn-number')?.closest('div:not(.loader)');
+        if (asnContainer) asnContainer.classList.remove('hidden');
+        document.getElementById('asn-number').innerHTML =
+          `<a href="/asn?asn=${asnNum}" class="hover:text-purple-200 underline decoration-dotted transition-colors" title="Open ASN Lookup">AS${asnNum}</a>`;
+      } else {
+        updateField(document.getElementById('asn-number'), null, null, document.getElementById('asn-error'), data.asn?.error || '-');
+      }
+      updateField(document.getElementById('asn-org'), data.asn?.organization, asnLoader);
+      updateRdns(document.getElementById('rdns-list'), data.rdns, rdnsLoader, document.getElementById('rdns-error'));
+      initOrUpdateMap('map', data.geo?.latitude, data.geo?.longitude, mapEl, mapLoader, mapMessage);
     }
 
     // ── Lookup ───────────────────────────────────────────────────
@@ -968,7 +1007,7 @@ export const page = {
 
     // ── Bootstrap ────────────────────────────────────────────────
     populateBrowserFingerprint();
-    fetchIpInfo().then(() => checkIPv6());
+    fetchIpInfo();
 
     const params = new URLSearchParams(search);
     const ipParam = params.get('ip');
