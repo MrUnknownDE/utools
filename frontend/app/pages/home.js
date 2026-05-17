@@ -25,6 +25,15 @@ export const page = {
           </a>
           <button id="copy-ip-btn" class="copy-btn hidden">copy</button>
         </div>
+        <!-- IPv6 row — shown only when dual-stack is detected -->
+        <div id="ipv6-row" class="hidden mt-2 flex items-center gap-2">
+          <span class="text-xs font-bold text-blue-400/60 uppercase tracking-wider w-10 shrink-0">IPv6</span>
+          <span id="ipv6-address" class="font-mono text-blue-300 text-sm break-all"></span>
+          <button id="copy-ipv6-btn" class="copy-btn hidden">copy</button>
+        </div>
+        <!-- Privacy / risk flags -->
+        <div id="privacy-flags" class="hidden mt-3 flex flex-wrap gap-1.5"></div>
+        <div id="privacy-loader" class="loader mt-3" style="width:16px;height:16px;border-width:2px"></div>
       </div>
 
       <div class="glass-card rounded-lg p-5 space-y-4">
@@ -68,21 +77,69 @@ export const page = {
       </div>
     </div>
 
-    <!-- Right column: map -->
-    <div class="space-y-4 fade-in" style="animation-delay:.2s">
-      <h2 class="text-lg font-semibold text-gray-200 flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
+    <!-- Right column: map — container is h-[420px] so the Leaflet map can fill it -->
+    <div class="fade-in" style="animation-delay:.2s">
+      <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
           <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
         </svg>
-        Location Visualization
+        Location
       </h2>
-      <div id="map-container" class="bg-gray-800/50 rounded-lg min-h-[400px] h-full flex items-center justify-center relative border border-gray-700/50 shadow-inner overflow-hidden">
-        <div id="map-loader" class="loader absolute z-10"></div>
-        <div id="map" class="w-full h-full rounded-lg hidden z-0 opacity-80 hover:opacity-100 transition-opacity duration-700"></div>
-        <p id="map-message" class="text-gray-400 hidden absolute text-sm">Could not load map.</p>
-        <div class="absolute inset-0 pointer-events-none rounded-lg ring-1 ring-inset ring-white/10"></div>
+      <div id="map-container" class="rounded-xl h-[420px] relative border border-gray-700/50 overflow-hidden bg-gray-900/60 shadow-inner">
+        <div id="map-loader" class="loader absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"></div>
+        <div id="map" class="w-full hidden z-0 transition-opacity duration-700 rounded-xl"></div>
+        <p id="map-message" class="text-gray-400 hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-sm">Could not load map.</p>
+        <div class="absolute inset-0 pointer-events-none rounded-xl ring-1 ring-inset ring-white/10"></div>
       </div>
     </div>
+  </div>
+
+  <!-- Browser Fingerprint -->
+  <div class="mt-6 glass-card rounded-xl p-5 fade-in" style="animation-delay:.3s">
+    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-700 pb-2 flex items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+      </svg>
+      Browser Fingerprint
+    </h2>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4 text-sm">
+      <div>
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Browser</p>
+        <p id="fp-browser" class="text-gray-200 font-medium font-mono">-</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Operating System</p>
+        <p id="fp-os" class="text-gray-200 font-medium">-</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Screen</p>
+        <p id="fp-screen" class="text-gray-200 font-medium font-mono">-</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Viewport</p>
+        <p id="fp-viewport" class="text-gray-200 font-medium font-mono">-</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Language</p>
+        <p id="fp-language" class="text-gray-200 font-medium">-</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Timezone</p>
+        <p id="fp-timezone" class="text-gray-200 font-medium">-</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Color Depth</p>
+        <p id="fp-color" class="text-gray-200 font-medium">-</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Privacy</p>
+        <p id="fp-privacy" class="text-gray-200 font-medium text-xs leading-relaxed">-</p>
+      </div>
+    </div>
+    <details class="mt-4 border-t border-gray-700/50 pt-3">
+      <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-300 select-none list-none transition-colors">User Agent string</summary>
+      <p id="fp-ua" class="font-mono text-xs text-gray-400 break-all mt-2 leading-relaxed"></p>
+    </details>
   </div>
 
   <!-- IP Lookup -->
@@ -104,12 +161,14 @@ export const page = {
     <div id="lookup-error" class="text-red-400 mb-4 hidden p-3 bg-red-900/20 border border-red-500/30 rounded text-sm"></div>
 
     <div id="lookup-results-section" class="hidden grid grid-cols-1 md:grid-cols-2 gap-8 mt-6 border-t border-gray-700/50 pt-6 fade-in">
-      <div class="space-y-6">
+      <!-- Left: info -->
+      <div class="space-y-5">
         <h3 class="text-lg font-semibold text-gray-200">Result for: <span id="lookup-ip-address" class="font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded"></span>
           <button id="copy-lookup-ip-btn" class="copy-btn ml-2">copy</button>
         </h3>
         <div id="lookup-result-loader" class="loader hidden"></div>
-        <div id="lookup-geo-info" class="space-y-1 text-sm text-gray-300">
+
+        <div id="lookup-geo-info" class="text-sm text-gray-300">
           <h4 class="font-bold text-gray-500 uppercase text-xs tracking-wider mb-2">Geolocation</h4>
           <div class="grid grid-cols-2 gap-x-2 gap-y-1">
             <p><span class="text-gray-500">Country:</span> <span id="lookup-country" class="text-white">-</span></p>
@@ -118,69 +177,145 @@ export const page = {
             <p><span class="text-gray-500">Zip:</span> <span id="lookup-postal" class="text-white">-</span></p>
             <p class="col-span-2"><span class="text-gray-500">Coords:</span> <span id="lookup-coords" class="font-mono text-purple-300">-</span></p>
             <p class="col-span-2"><span class="text-gray-500">Time:</span> <span id="lookup-timezone" class="text-white">-</span></p>
-            <p id="lookup-geo-error" class="text-red-400 col-span-2"></p>
+            <p id="lookup-geo-error" class="text-red-400 col-span-2 text-xs"></p>
           </div>
         </div>
-        <div id="lookup-asn-info" class="space-y-1 text-sm text-gray-300">
-          <h4 class="font-bold text-gray-500 uppercase text-xs tracking-wider mb-2 mt-4">ASN</h4>
+
+        <div id="lookup-asn-info" class="text-sm text-gray-300">
+          <h4 class="font-bold text-gray-500 uppercase text-xs tracking-wider mb-2">ASN</h4>
           <p><span class="text-gray-500">Number:</span> <span id="lookup-asn-number" class="text-white font-mono">-</span></p>
           <p><span class="text-gray-500">Org:</span> <span id="lookup-asn-org" class="text-white">-</span></p>
-          <p id="lookup-asn-error" class="text-red-400"></p>
+          <p id="lookup-asn-error" class="text-red-400 text-xs"></p>
         </div>
-        <div id="lookup-rdns-info" class="space-y-1 text-sm text-gray-300">
-          <h4 class="font-bold text-gray-500 uppercase text-xs tracking-wider mb-2 mt-4">Reverse DNS</h4>
+
+        <div id="lookup-rdns-info" class="text-sm text-gray-300">
+          <h4 class="font-bold text-gray-500 uppercase text-xs tracking-wider mb-2">Reverse DNS</h4>
           <ul id="lookup-rdns-list" class="list-none space-y-1 font-mono text-xs text-green-400"><li>-</li></ul>
-          <p id="lookup-rdns-error" class="text-red-400"></p>
+          <p id="lookup-rdns-error" class="text-red-400 text-xs"></p>
         </div>
       </div>
 
-      <div class="space-y-6">
-        <h4 class="font-bold text-gray-500 uppercase text-xs tracking-wider mb-2">Location Map</h4>
-        <div id="lookup-map-container" class="glass-panel rounded-lg min-h-[250px] flex items-center justify-center relative overflow-hidden">
-          <div id="lookup-map-loader" class="loader hidden absolute z-10"></div>
-          <div id="lookup-map" class="w-full rounded hidden opacity-90"></div>
-          <p id="lookup-map-message" class="text-gray-400 hidden absolute">Could not load map.</p>
-          <div class="absolute inset-0 pointer-events-none ring-1 ring-inset ring-white/10 rounded-lg"></div>
+      <!-- Right: map + action buttons -->
+      <div class="space-y-4">
+        <h4 class="font-bold text-gray-500 uppercase text-xs tracking-wider">Location Map</h4>
+        <div id="lookup-map-container" class="rounded-xl h-[260px] relative overflow-hidden bg-gray-900/60 border border-gray-700/50">
+          <div id="lookup-map-loader" class="loader hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"></div>
+          <div id="lookup-map" class="w-full hidden rounded-xl"></div>
+          <p id="lookup-map-message" class="text-gray-400 hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-center px-4">Could not load map.</p>
+          <div class="absolute inset-0 pointer-events-none ring-1 ring-inset ring-white/10 rounded-xl"></div>
         </div>
-        <div class="flex flex-wrap gap-2 pt-2">
-          <button id="lookup-ping-button" disabled class="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-gray-600 hover:border-gray-500 shadow-md">Ping</button>
-          <button id="lookup-trace-button" disabled class="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-gray-600 hover:border-gray-500 shadow-md">Trace</button>
-          <button id="lookup-scan-button" disabled class="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-gray-600 hover:border-gray-500 shadow-md">Port Scan</button>
-        </div>
-        <div id="lookup-ping-results" class="mt-4 text-sm hidden fade-in">
-          <h4 class="font-bold text-purple-400 mb-2 flex items-center gap-2">
-            <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div> Ping Results
-          </h4>
-          <div id="lookup-ping-loader" class="loader hidden"></div>
-          <pre id="lookup-ping-output" class="result-pre mt-1"></pre>
-          <p id="lookup-ping-error" class="text-red-400 mt-2"></p>
+
+        <!-- Action buttons -->
+        <div class="grid grid-cols-3 gap-2">
+          <button id="lookup-ping-button" disabled title="Send ICMP ping"
+            class="action-tool-btn flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-gray-700/50 bg-gray-800/50 hover:bg-purple-900/30 hover:border-purple-500/40 text-gray-400 hover:text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            <span class="text-xs font-semibold">Ping</span>
+          </button>
+          <button id="lookup-trace-button" disabled title="Run traceroute"
+            class="action-tool-btn flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-gray-700/50 bg-gray-800/50 hover:bg-purple-900/30 hover:border-purple-500/40 text-gray-400 hover:text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+            </svg>
+            <span class="text-xs font-semibold">Traceroute</span>
+          </button>
+          <button id="lookup-scan-button" disabled title="Scan common ports"
+            class="action-tool-btn flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-gray-700/50 bg-gray-800/50 hover:bg-purple-900/30 hover:border-purple-500/40 text-gray-400 hover:text-white">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+            </svg>
+            <span class="text-xs font-semibold">Port Scan</span>
+          </button>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Ping Results — dedicated section, consistent with traceroute/port-scan -->
+  <div id="ping-section" class="mt-8 p-6 glass-card rounded-xl hidden fade-in">
+    <h2 class="text-xl font-bold text-purple-300 border-b border-purple-500/30 pb-2 mb-4 flex items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+      </svg>
+      Ping &mdash; <span id="ping-target" class="font-mono text-white text-base font-normal ml-1"></span>
+    </h2>
+    <div class="flex items-center gap-3 mb-4 text-sm">
+      <div id="ping-section-loader" class="loader hidden"></div>
+      <span id="ping-section-message" class="text-gray-400"></span>
+      <span id="ping-section-error" class="text-red-400"></span>
+    </div>
+    <!-- Stat cards -->
+    <div id="ping-stats-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 hidden">
+      <div class="bg-gray-900/50 rounded-lg p-4 text-center border border-gray-700/30">
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Sent</p>
+        <p id="ping-stat-sent" class="text-3xl font-bold font-mono text-white">-</p>
+      </div>
+      <div class="bg-gray-900/50 rounded-lg p-4 text-center border border-gray-700/30">
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Received</p>
+        <p id="ping-stat-recv" class="text-3xl font-bold font-mono text-green-400">-</p>
+      </div>
+      <div class="bg-gray-900/50 rounded-lg p-4 text-center border border-gray-700/30">
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Packet Loss</p>
+        <p id="ping-stat-loss" class="text-3xl font-bold font-mono text-red-400">-</p>
+      </div>
+      <div class="bg-gray-900/50 rounded-lg p-4 text-center border border-gray-700/30">
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Avg RTT</p>
+        <p id="ping-stat-rtt" class="text-3xl font-bold font-mono text-blue-300">-</p>
+      </div>
+    </div>
+    <!-- RTT range bar -->
+    <div id="ping-rtt-range" class="hidden mb-4 px-4 py-3 bg-gray-900/40 rounded-lg border border-gray-700/30 flex flex-wrap gap-6 text-xs font-mono text-gray-500">
+      <span>min &nbsp;<span id="ping-rtt-min" class="text-gray-200 font-semibold">-</span> ms</span>
+      <span>avg &nbsp;<span id="ping-rtt-avg" class="text-gray-200 font-semibold">-</span> ms</span>
+      <span>max &nbsp;<span id="ping-rtt-max" class="text-gray-200 font-semibold">-</span> ms</span>
+    </div>
+    <!-- Raw output -->
+    <details>
+      <summary class="text-xs text-gray-500 hover:text-gray-300 cursor-pointer select-none list-none transition-colors">Raw output</summary>
+      <pre id="ping-raw-output" class="result-pre mt-2 text-xs"></pre>
+    </details>
   </div>
 
   <!-- Traceroute -->
   <div id="traceroute-section" class="mt-8 p-6 glass-card rounded-xl hidden fade-in">
-    <h2 class="text-xl font-bold text-purple-300 border-b border-purple-500/30 pb-2 mb-4">Traceroute Results</h2>
-    <div class="flex items-center justify-between mb-4">
+    <h2 class="text-xl font-bold text-purple-300 border-b border-purple-500/30 pb-2 mb-4 flex items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+      </svg>
+      Traceroute &mdash; <span id="traceroute-target" class="font-mono text-white text-base font-normal ml-1"></span>
+    </h2>
+    <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-3 text-sm">
         <div id="traceroute-loader" class="loader hidden"></div>
-        <span id="traceroute-message" class="text-gray-300"></span>
+        <span id="traceroute-message" class="text-gray-400"></span>
       </div>
-      <button id="traceroute-stop-btn" class="stop-btn hidden">■ Stop</button>
+      <button id="traceroute-stop-btn" class="stop-btn hidden">&#9632; Stop</button>
     </div>
-    <div id="traceroute-output" class="rounded-lg overflow-hidden"><pre class="m-0"></pre></div>
+    <!-- Hop table header -->
+    <div class="hidden sm:grid traceroute-header text-xs text-gray-600 uppercase tracking-wider px-2 mb-1" style="grid-template-columns:2rem 1fr auto">
+      <span class="text-right pr-3">#</span>
+      <span>IP / Hostname</span>
+      <span class="text-right">RTT</span>
+    </div>
+    <div id="traceroute-output" class="font-mono text-sm rounded-lg border border-gray-700/30 bg-black/20 overflow-y-auto max-h-[420px] p-2 space-y-0.5"></div>
   </div>
 
   <!-- Port Scan -->
   <div id="port-scan-section" class="mt-8 p-6 glass-card rounded-xl hidden fade-in">
-    <h2 class="text-xl font-bold text-purple-300 border-b border-purple-500/30 pb-2 mb-4">Port Scan Results</h2>
+    <h2 class="text-xl font-bold text-purple-300 border-b border-purple-500/30 pb-2 mb-4 flex items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+      </svg>
+      Port Scan Results
+    </h2>
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3 text-sm">
         <div id="port-scan-loader" class="loader hidden"></div>
         <span id="port-scan-message" class="text-gray-300"></span>
       </div>
-      <button id="port-scan-stop-btn" class="stop-btn hidden">■ Stop</button>
+      <button id="port-scan-stop-btn" class="stop-btn hidden">&#9632; Stop</button>
     </div>
     <div id="port-scan-output" class="text-sm font-mono bg-gray-900/50 p-4 rounded-lg border border-gray-700/50 max-h-[300px] overflow-y-auto"></div>
   </div>
@@ -215,13 +350,20 @@ export const page = {
     const lookupPingBtn   = document.getElementById('lookup-ping-button');
     const lookupTraceBtn  = document.getElementById('lookup-trace-button');
     const lookupScanBtn   = document.getElementById('lookup-scan-button');
-    const lookupPingRes   = document.getElementById('lookup-ping-results');
-    const lookupPingLoader= document.getElementById('lookup-ping-loader');
-    const lookupPingOutput= document.getElementById('lookup-ping-output');
-    const lookupPingError = document.getElementById('lookup-ping-error');
+
+    // Ping section
+    const pingSect        = document.getElementById('ping-section');
+    const pingTarget      = document.getElementById('ping-target');
+    const pingSectLoader  = document.getElementById('ping-section-loader');
+    const pingSectMsg     = document.getElementById('ping-section-message');
+    const pingSectErr     = document.getElementById('ping-section-error');
+    const pingStatsGrid   = document.getElementById('ping-stats-grid');
+    const pingRttRange    = document.getElementById('ping-rtt-range');
+    const pingRawOutput   = document.getElementById('ping-raw-output');
 
     const tracerouteSection  = document.getElementById('traceroute-section');
-    const tracerouteOutput   = document.querySelector('#traceroute-output pre');
+    const tracerouteTarget   = document.getElementById('traceroute-target');
+    const tracerouteOutput   = document.getElementById('traceroute-output');
     const tracerouteLoader   = document.getElementById('traceroute-loader');
     const tracerouteMessage  = document.getElementById('traceroute-message');
     const tracerouteStopBtn  = document.getElementById('traceroute-stop-btn');
@@ -233,7 +375,7 @@ export const page = {
     const portScanStopBtn    = document.getElementById('port-scan-stop-btn');
 
     // ── State ────────────────────────────────────────────────────
-    let map = null, lookupMap = null, currentIp = null, currentLookupIp = null;
+    let currentIp = null, currentLookupIp = null;
     let eventSource = null, portScanEventSource = null;
 
     // ── Helpers ──────────────────────────────────────────────────
@@ -321,12 +463,100 @@ export const page = {
     }
 
     // ── Copy buttons ─────────────────────────────────────────────
-    setupCopyBtn(copyIpBtn, () => ipAddressSpan.textContent);
+    setupCopyBtn(copyIpBtn,      () => ipAddressSpan.textContent);
     setupCopyBtn(copyLookupIpBtn, () => lookupIpEl.textContent);
+    const copyIpv6Btn = document.getElementById('copy-ipv6-btn');
+    setupCopyBtn(copyIpv6Btn, () => document.getElementById('ipv6-address').textContent);
 
     // ── Lookup button enable/disable ─────────────────────────────
     const syncLookupBtn = () => { lookupBtn.disabled = !lookupInput.value.trim(); };
     lookupInput.addEventListener('input', syncLookupBtn);
+
+    // ── IPv6 detection ───────────────────────────────────────────
+    async function checkIPv6() {
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 4000);
+      try {
+        const r   = await fetch('https://ipv6.icanhazip.com', { signal: ctrl.signal });
+        const ip6 = r.ok ? (await r.text()).trim() : null;
+        if (ip6 && ip6.includes(':')) {
+          document.getElementById('ipv6-address').textContent = ip6;
+          const row = document.getElementById('ipv6-row');
+          row.classList.remove('hidden');
+          copyIpv6Btn.classList.remove('hidden');
+        }
+      } catch { /* no IPv6 or timeout — show nothing */ }
+      finally { clearTimeout(timer); }
+    }
+
+    // ── Privacy / risk flags ──────────────────────────────────────
+    const FLAG_COLORS = {
+      green:  'bg-green-900/40 text-green-300 border border-green-700/50',
+      orange: 'bg-orange-900/40 text-orange-300 border border-orange-700/50',
+      yellow: 'bg-yellow-900/40 text-yellow-300 border border-yellow-700/50',
+      red:    'bg-red-900/40 text-red-300 border border-red-700/50',
+    };
+
+    async function fetchPrivacyFlags(ip) {
+      const loader    = document.getElementById('privacy-loader');
+      const container = document.getElementById('privacy-flags');
+      try {
+        const r    = await fetch(`${API}/privacy/${encodeURIComponent(ip)}`);
+        const data = await r.json();
+        if (!data.flags?.length) return;
+        container.innerHTML = data.flags.map(f =>
+          `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${FLAG_COLORS[f.color] || FLAG_COLORS.green}">${f.label}</span>`
+        ).join('');
+        container.classList.remove('hidden');
+      } catch { /* silent fail */ }
+      finally { loader?.classList.add('hidden'); }
+    }
+
+    // ── Browser fingerprint ───────────────────────────────────────
+    function populateBrowserFingerprint() {
+      const ua = navigator.userAgent;
+
+      function getBrowser() {
+        if (/Edg\/(\d+)/.test(ua))                           return `Edge ${RegExp.$1}`;
+        if (/OPR\/(\d+)/.test(ua))                           return `Opera ${RegExp.$1}`;
+        if (/Chrome\/(\d+)/.test(ua))                        return `Chrome ${RegExp.$1}`;
+        if (/Firefox\/(\d+)/.test(ua))                       return `Firefox ${RegExp.$1}`;
+        if (/Version\/([\d.]+).*Safari/.test(ua))            return `Safari ${RegExp.$1}`;
+        return 'Unknown';
+      }
+
+      function getOS() {
+        if (/Windows NT 10\.0/.test(ua))                     return 'Windows 10 / 11';
+        if (/Windows NT 6\.3/.test(ua))                      return 'Windows 8.1';
+        if (/Windows NT 6\.1/.test(ua))                      return 'Windows 7';
+        if (/Mac OS X ([\d_]+)/.test(ua))                    return `macOS ${RegExp.$1.replace(/_/g, '.')}`;
+        if (/Android ([\d.]+)/.test(ua))                     return `Android ${RegExp.$1}`;
+        if (/iPhone OS ([\d_]+)/.test(ua))                   return `iOS ${RegExp.$1.replace(/_/g, '.')}`;
+        if (/iPad.*OS ([\d_]+)/.test(ua))                    return `iPadOS ${RegExp.$1.replace(/_/g, '.')}`;
+        if (/Linux/.test(ua))                                return 'Linux';
+        return 'Unknown';
+      }
+
+      document.getElementById('fp-browser').textContent  = getBrowser();
+      document.getElementById('fp-os').textContent       = getOS();
+      document.getElementById('fp-screen').textContent   =
+        `${screen.width} × ${screen.height}` + (window.devicePixelRatio !== 1 ? ` @ ${window.devicePixelRatio}×` : '');
+      document.getElementById('fp-viewport').textContent = `${window.innerWidth} × ${window.innerHeight} px`;
+      document.getElementById('fp-language').textContent =
+        navigator.language + (navigator.languages?.length > 1 ? `  (+${navigator.languages.length - 1} more)` : '');
+      document.getElementById('fp-timezone').textContent = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      document.getElementById('fp-color').textContent    = `${screen.colorDepth}-bit`;
+
+      const bits = [];
+      if (navigator.cookieEnabled)          bits.push('Cookies on');
+      else                                  bits.push('Cookies off');
+      if (navigator.doNotTrack === '1')     bits.push('DNT enabled');
+      const conn = navigator.connection;
+      if (conn?.effectiveType)              bits.push(conn.effectiveType.toUpperCase());
+      document.getElementById('fp-privacy').textContent = bits.join(' · ');
+
+      document.getElementById('fp-ua').textContent = ua;
+    }
 
     // ── Own IP fetch ─────────────────────────────────────────────
     async function fetchIpInfo() {
@@ -342,6 +572,7 @@ export const page = {
         if (!r.ok) throw new Error(`${r.statusText} (${r.status})`);
         const data = await r.json();
         currentIp = data.ip;
+        fetchPrivacyFlags(data.ip);
 
         ipAddressSpan.textContent = data.ip;
         ipAddressLink.classList.remove('hidden');
@@ -370,7 +601,7 @@ export const page = {
         }
         updateField(document.getElementById('asn-org'), data.asn?.organization, asnLoader);
         updateRdns(document.getElementById('rdns-list'), data.rdns, rdnsLoader, document.getElementById('rdns-error'));
-        map = initOrUpdateMap('map', data.geo?.latitude, data.geo?.longitude, mapEl, mapLoader, mapMessage);
+        initOrUpdateMap('map', data.geo?.latitude, data.geo?.longitude, mapEl, mapLoader, mapMessage);
 
       } catch (err) {
         console.error('Failed to fetch IP info:', err);
@@ -386,8 +617,7 @@ export const page = {
       lookupMapLoader.classList.add('hidden');
       lookupMapEl.classList.add('hidden');
       lookupMapMsg.classList.add('hidden');
-      lookupPingRes.classList.add('hidden');
-      lookupPingLoader.classList.add('hidden');
+      pingSect.classList.add('hidden');
       portScanSection.classList.add('hidden');
       portScanOutput.innerHTML = '';
       [lookupIpEl, document.getElementById('lookup-country'), document.getElementById('lookup-region'),
@@ -397,8 +627,6 @@ export const page = {
        document.getElementById('lookup-geo-error'), document.getElementById('lookup-asn-error'),
        document.getElementById('lookup-rdns-error')].forEach(el => { if (el) el.textContent = ''; });
       document.getElementById('lookup-rdns-list').innerHTML = '<li>-</li>';
-      lookupPingOutput.textContent = '';
-      lookupPingError.textContent = '';
       [lookupPingBtn, lookupTraceBtn, lookupScanBtn].forEach(b => { if (b) b.disabled = true; });
       currentLookupIp = null;
       if (window['lookup-map_instance']) { window['lookup-map_instance'].remove(); window['lookup-map_instance'] = null; }
@@ -460,7 +688,7 @@ export const page = {
         }
         updateField(document.getElementById('lookup-asn-org'), data.asn?.organization);
         updateRdns(document.getElementById('lookup-rdns-list'), data.rdns, null, document.getElementById('lookup-rdns-error'));
-        lookupMap = initOrUpdateMap('lookup-map', data.geo?.latitude, data.geo?.longitude, lookupMapEl, lookupMapLoader, lookupMapMsg);
+        initOrUpdateMap('lookup-map', data.geo?.latitude, data.geo?.longitude, lookupMapEl, lookupMapLoader, lookupMapMsg);
         [lookupPingBtn, lookupTraceBtn, lookupScanBtn].forEach(b => { if (b) b.disabled = false; });
 
       } catch (err) {
@@ -478,25 +706,44 @@ export const page = {
 
     // ── Ping ─────────────────────────────────────────────────────
     async function runPing(ip) {
-      lookupPingRes.classList.remove('hidden');
-      lookupPingLoader.classList.remove('hidden');
-      lookupPingOutput.textContent = '';
-      lookupPingError.textContent = '';
+      pingSect.classList.remove('hidden');
+      pingTarget.textContent = ip;
+      pingSectLoader.classList.remove('hidden');
+      pingSectMsg.textContent = `Pinging ${ip}…`;
+      pingSectErr.textContent = '';
+      pingStatsGrid.classList.add('hidden');
+      pingRttRange.classList.add('hidden');
+      pingRawOutput.textContent = '';
+      pingSect.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
       try {
         const r    = await fetch(`${API}/ping?targetIp=${encodeURIComponent(ip)}`);
         const data = await r.json();
         if (!r.ok || !data.success) throw new Error(data.error || `HTTP ${r.status}`);
-        let out = `--- Ping Statistics for ${ip} ---\n`;
-        if (data.stats) {
-          out += `Packets: ${data.stats.packets.transmitted} sent, ${data.stats.packets.received} received, ${data.stats.packets.lossPercent}% loss\n`;
-          if (data.stats.rtt) out += `RTT (ms): min=${data.stats.rtt.min} avg=${data.stats.rtt.avg} max=${data.stats.rtt.max}\n`;
+
+        if (data.stats?.packets) {
+          const loss = data.stats.packets.lossPercent;
+          document.getElementById('ping-stat-sent').textContent = data.stats.packets.transmitted;
+          document.getElementById('ping-stat-recv').textContent = data.stats.packets.received;
+          document.getElementById('ping-stat-loss').textContent = `${loss}%`;
+          document.getElementById('ping-stat-loss').className =
+            `text-3xl font-bold font-mono ${loss === 0 || loss === '0' ? 'text-green-400' : loss >= 50 ? 'text-red-400' : 'text-yellow-400'}`;
+          document.getElementById('ping-stat-rtt').textContent = data.stats.rtt ? `${data.stats.rtt.avg} ms` : '-';
+          pingStatsGrid.classList.remove('hidden');
         }
-        out += `\n--- Raw Output ---\n${data.rawOutput || ''}`;
-        lookupPingOutput.textContent = out;
+        if (data.stats?.rtt) {
+          document.getElementById('ping-rtt-min').textContent = data.stats.rtt.min;
+          document.getElementById('ping-rtt-avg').textContent = data.stats.rtt.avg;
+          document.getElementById('ping-rtt-max').textContent = data.stats.rtt.max;
+          pingRttRange.classList.remove('hidden');
+        }
+        pingRawOutput.textContent = data.rawOutput || '';
+        pingSectMsg.textContent = `Ping to ${ip} complete.`;
       } catch (err) {
-        lookupPingError.textContent = `Ping Error: ${err.message}`;
+        pingSectErr.textContent = `Ping failed: ${err.message}`;
+        pingSectMsg.textContent = '';
       } finally {
-        lookupPingLoader.classList.add('hidden');
+        pingSectLoader.classList.add('hidden');
       }
     }
 
@@ -504,11 +751,13 @@ export const page = {
     function startTraceroute(ip) {
       if (eventSource) { eventSource.close(); eventSource = null; }
       tracerouteSection.classList.remove('hidden');
-      tracerouteOutput.textContent = '';
+      if (tracerouteTarget) tracerouteTarget.textContent = ip;
+      tracerouteOutput.innerHTML = '';
       tracerouteLoader.classList.remove('hidden');
       tracerouteStopBtn.classList.remove('hidden');
       tracerouteMessage.textContent = `Starting traceroute to ${ip}…`;
       globalError.classList.add('hidden');
+      tracerouteSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
       eventSource = new EventSource(`${API}/traceroute?targetIp=${encodeURIComponent(ip)}`);
 
@@ -531,7 +780,7 @@ export const page = {
       });
       eventSource.addEventListener('end', e => {
         try {
-          const d = JSON.parse(e.data);
+          const d   = JSON.parse(e.data);
           const msg = `Traceroute finished${d.exitCode === 0 ? ' successfully' : ` (exit code ${d.exitCode})`}.`;
           displayTraceLine(msg, 'end-line');
           tracerouteMessage.textContent = msg;
@@ -552,34 +801,74 @@ export const page = {
 
     function displayTraceLine(text, cls = '') {
       const div = document.createElement('div');
+      div.classList.add('px-2', 'py-0.5', 'fade-in');
       if (cls) div.classList.add(cls);
-      div.classList.add('fade-in');
       div.textContent = text;
       tracerouteOutput.appendChild(div);
       tracerouteOutput.scrollTop = tracerouteOutput.scrollHeight;
     }
 
     function displayHop(hop) {
-      const div = document.createElement('div');
-      div.classList.add('hop-line', 'fade-in');
-      const num = document.createElement('span'); num.classList.add('hop-number'); num.textContent = hop.hop || '?'; div.appendChild(num);
+      const row = document.createElement('div');
+      row.classList.add('hop-row', 'fade-in');
+
+      // Hop number
+      const numEl = document.createElement('span');
+      numEl.classList.add('hop-number');
+      numEl.textContent = hop.hop ?? '?';
+      row.appendChild(numEl);
+
+      // Body: IP line + optional RDNS line below
+      const body = document.createElement('div');
+      body.classList.add('hop-body');
+
       if (hop.ip) {
-        const ip = document.createElement('span'); ip.classList.add('hop-ip'); ip.textContent = hop.ip; div.appendChild(ip);
-        if (hop.hostname) { const h = document.createElement('span'); h.classList.add('hop-hostname'); h.textContent = ` (${hop.hostname})`; div.appendChild(h); }
+        const ipLine = document.createElement('div');
+        ipLine.classList.add('hop-ip-line');
+
+        const ipEl = document.createElement('span');
+        ipEl.classList.add('hop-ip');
+        ipEl.textContent = hop.ip;
+        ipLine.appendChild(ipEl);
+
+        // RTTs — right-aligned via flex margin-left auto on the rtt group
+        if (Array.isArray(hop.rtt)) {
+          const rttsEl = document.createElement('span');
+          rttsEl.classList.add('hop-rtts');
+          hop.rtt.forEach(r => {
+            const s = document.createElement('span');
+            s.classList.add(r === '*' ? 'hop-timeout' : 'hop-rtt');
+            s.textContent = r === '*' ? '*' : `${r} ms`;
+            rttsEl.appendChild(s);
+          });
+          ipLine.appendChild(rttsEl);
+        }
+        body.appendChild(ipLine);
+
+        // RDNS — own line, only when it differs from the IP
+        if (hop.hostname && hop.hostname !== hop.ip) {
+          const rdnsEl = document.createElement('div');
+          rdnsEl.classList.add('hop-rdns');
+          rdnsEl.textContent = hop.hostname;
+          body.appendChild(rdnsEl);
+        }
       } else if (hop.rtt?.every(r => r === '*')) {
-        const t = document.createElement('span'); t.classList.add('hop-timeout'); t.textContent = '* * *'; div.appendChild(t);
+        const line = document.createElement('div');
+        line.classList.add('hop-ip-line');
+        const t = document.createElement('span');
+        t.classList.add('hop-timeout');
+        t.textContent = '* * *';
+        line.appendChild(t);
+        body.appendChild(line);
       } else {
-        div.appendChild(document.createTextNode(hop.rawLine || 'Unknown hop'));
+        const line = document.createElement('div');
+        line.classList.add('hop-ip-line', 'text-gray-400');
+        line.textContent = hop.rawLine || 'Unknown hop';
+        body.appendChild(line);
       }
-      if (Array.isArray(hop.rtt)) {
-        hop.rtt.forEach(r => {
-          const s = document.createElement('span');
-          s.classList.add(r === '*' ? 'hop-timeout' : 'hop-rtt');
-          s.textContent = r === '*' ? ' *' : ` ${r} ms`;
-          div.appendChild(s);
-        });
-      }
-      tracerouteOutput.appendChild(div);
+
+      row.appendChild(body);
+      tracerouteOutput.appendChild(row);
       tracerouteOutput.scrollTop = tracerouteOutput.scrollHeight;
     }
 
@@ -591,6 +880,7 @@ export const page = {
       portScanLoader.classList.remove('hidden');
       portScanStopBtn.classList.remove('hidden');
       portScanMessage.textContent = `Starting port scan for ${ip}…`;
+      portScanSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
       portScanEventSource = new EventSource(`${API}/port-scan?targetIp=${encodeURIComponent(ip)}`);
       portScanEventSource.onopen = () => {};
@@ -650,6 +940,8 @@ export const page = {
     portScanStopBtn.addEventListener('click', stopPortScan);
 
     // ── Bootstrap ────────────────────────────────────────────────
+    populateBrowserFingerprint();
+    checkIPv6();
     fetchIpInfo();
 
     const params = new URLSearchParams(search);

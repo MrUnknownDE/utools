@@ -32,6 +32,7 @@ const versionRoutes = require('./routes/version');
 const portScanRoutes = require('./routes/portScan');
 const macLookupRoutes = require('./routes/macLookup');
 const asnLookupRoutes = require('./routes/asnLookup');
+const privacyRoutes   = require('./routes/privacy');
 
 // --- Logger Initialisierung ---
 const logger = pino({
@@ -88,6 +89,7 @@ app.use('/api/version', versionRoutes);
 app.use('/api/port-scan', portScanRoutes);
 app.use('/api/mac-lookup', macLookupRoutes);
 app.use('/api/asn-lookup', asnLookupRoutes);
+app.use('/api/privacy',   privacyRoutes);
 
 
 // Sentry error handler — must be after routes, before custom error handler
