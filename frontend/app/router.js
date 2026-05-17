@@ -67,6 +67,7 @@ async function navigate(path, { push = true, search = '' } = {}) {
 
 // ── Intercept same-origin link clicks ───────────────────────────
 document.addEventListener('click', e => {
+  if (e.defaultPrevented) return;
   const a = e.target.closest('a[href]');
   if (!a) return;
   let url;
