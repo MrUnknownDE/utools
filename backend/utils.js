@@ -313,6 +313,9 @@ function checkPort(port, host, timeout = 2000) {
             resolve({ port, status, service, error: err.code });
         });
 
+        // codeql[js/request-forgery] host is validated a few lines above (isValidIp + isPrivateIp,
+        // which throws for anything private/loopback/link-local before this point is ever reached);
+        // connecting to arbitrary *public* IPs is this endpoint's actual purpose (port scanner).
         socket.connect(port, host);
     });
 }
