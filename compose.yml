@@ -13,6 +13,10 @@ services:
       SENTRY_DSN: "https://7ea70caba68f548fb96482a573006a7b@o447623.ingest.us.sentry.io/4509062020333568"
       # ASN Cache directory (filesystem persistence across restarts)
       ASN_CACHE_DIR: /app/asn-cache
+      # Speedtest on the /diagnose page — opt-in per deployment (see backend/example.env)
+      SPEEDTEST_ENABLED: "true"
+      SPEEDTEST_MAX_DOWNLOAD_MB: 25
+      SPEEDTEST_MAX_UPLOAD_MB: 25
     volumes:
       # Persistent ASN lookup cache — survives container restarts
       - asn_cache:/app/asn-cache

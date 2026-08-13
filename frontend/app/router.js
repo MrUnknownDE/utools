@@ -4,14 +4,16 @@ import { page as dnsPage }    from './pages/dns.js';
 import { page as whoisPage }  from './pages/whois.js';
 import { page as macPage }    from './pages/mac.js';
 import { page as asnPage }    from './pages/asn.js';
+import { page as diagnosePage } from './pages/diagnose.js';
 
 const routes = {
-  '/':       homePage,
-  '/subnet': subnetPage,
-  '/dns':    dnsPage,
-  '/whois':  whoisPage,
-  '/mac':    macPage,
-  '/asn':    asnPage,
+  '/':         homePage,
+  '/subnet':   subnetPage,
+  '/dns':      dnsPage,
+  '/whois':    whoisPage,
+  '/mac':      macPage,
+  '/asn':      asnPage,
+  '/diagnose': diagnosePage,
 };
 
 const app = document.getElementById('app');

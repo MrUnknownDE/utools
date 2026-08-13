@@ -34,6 +34,8 @@ const macLookupRoutes = require('./routes/macLookup');
 const asnLookupRoutes = require('./routes/asnLookup');
 const privacyRoutes   = require('./routes/privacy');
 const myipRoutes      = require('./routes/myip');
+const echoRoutes      = require('./routes/echo');
+const speedtestRoutes = require('./routes/speedtest');
 
 // --- Logger Initialisierung ---
 const logger = pino({
@@ -74,7 +76,38 @@ const generalLimiter = rateLimit({
     }
 });
 
-// Apply the limiter to ALL API routes
+// Dedicated, more permissive limiter for the RTT-probe endpoint used by the
+// connection-diagnostics page — a single latency/packet-loss test run fires
+// ~40 requests, which would blow through the general limiter immediately.
+const echoLimiter = rateLimit({
+    windowMs: parseInt(process.env.ECHO_RATE_LIMIT_WINDOW_MS || (60 * 1000).toString(), 10), // Default 1 minute
+    max: parseInt(process.env.ECHO_RATE_LIMIT_MAX || '400', 10),
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req, res) => req.ip,
+    handler: (req, res, next, options) => {
+        res.status(options.statusCode).send(options.message);
+    }
+});
+
+// Dedicated, stricter limiter for the bandwidth-heavy speedtest endpoints.
+const speedtestLimiter = rateLimit({
+    windowMs: parseInt(process.env.SPEEDTEST_RATE_LIMIT_WINDOW_MS || (10 * 60 * 1000).toString(), 10), // Default 10 minutes
+    max: parseInt(process.env.SPEEDTEST_RATE_LIMIT_MAX || '10', 10),
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req, res) => req.ip,
+    handler: (req, res, next, options) => {
+        res.status(options.statusCode).send(options.message);
+    }
+});
+
+// Mounted before the general limiter so these routes use their own limits
+// instead of falling through to it.
+app.use('/api/echo', echoLimiter, echoRoutes);
+app.use('/api/speedtest', speedtestLimiter, speedtestRoutes);
+
+// Apply the limiter to ALL other API routes
 app.use('/api', generalLimiter);
 
 

@@ -1,4 +1,4 @@
-import { API, setupCopyBtn } from '../shared.js';
+import { API, setupCopyBtn, detectDualStack } from '../shared.js';
 
 export const page = {
   title: 'IP Info & Tools',
@@ -568,30 +568,12 @@ export const page = {
       mapEl.classList.add('hidden');
       mapMessage.classList.add('hidden');
 
-      // Force-detect via protocol-specific subdomains (ipv4./ipv6. have A-only / AAAA-only DNS)
-      async function forceDetect(url) {
-        const ctrl  = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 4000);
-        try {
-          const r = await fetch(url, { signal: ctrl.signal });
-          if (!r.ok) return null;
-          const d = await r.json();
-          return d.ip || null;
-        } catch { return null; }
-        finally { clearTimeout(timer); }
-      }
-
       function setPrivacyNA(version) {
         const el = document.getElementById(`privacy-flags-v${version}`);
         if (el) { document.getElementById(`privacy-loader-v${version}`)?.remove(); el.innerHTML = '<span class="text-xs text-gray-600">N/A</span>'; }
       }
 
-      // Use current hostname so it works for any deployment (utools.mrunk.de → ipv4.utools.mrunk.de)
-      const host = location.hostname;
-      const [ipv4, ipv6] = await Promise.all([
-        forceDetect(`https://ipv4.${host}/api/myip`),
-        forceDetect(`https://ipv6.${host}/api/myip`),
-      ]);
+      const { ipv4, ipv6 } = await detectDualStack();
 
       const hasSeperateIPv6 = !!(ipv4 && ipv6 && ipv4 !== ipv6);
       const primaryIp       = ipv4 || ipv6;
