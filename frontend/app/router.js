@@ -95,8 +95,26 @@ window._router = {
 // ── Fetch version once ───────────────────────────────────────────
 fetch('/api/version')
   .then(r => r.json())
-  .then(d => { const el = document.getElementById('commit-sha'); if (el) el.textContent = d.commitSha || 'unknown'; })
-  .catch(() => { const el = document.getElementById('commit-sha'); if (el) el.textContent = 'error'; });
+  .then(d => {
+    const shaEl = document.getElementById('commit-sha');
+    if (shaEl) shaEl.textContent = d.commitSha || 'unknown';
+
+    const geoipEl = document.getElementById('geoip-date');
+    if (geoipEl) {
+      // City and ASN DB are updated together monthly (see maxmind-update.yml) — same date in practice,
+      // but fall back to whichever is present in case they ever diverge.
+      const date = d.cityDbDate || d.asnDbDate;
+      geoipEl.textContent = date
+        ? new Date(date).toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' })
+        : 'unbekannt';
+    }
+  })
+  .catch(() => {
+    const el = document.getElementById('commit-sha');
+    if (el) el.textContent = 'error';
+    const geoipEl = document.getElementById('geoip-date');
+    if (geoipEl) geoipEl.textContent = 'error';
+  });
 
 // ── Initial render ───────────────────────────────────────────────
 navigate(location.pathname, { push: false, search: location.search });

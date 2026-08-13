@@ -50,7 +50,30 @@ function getMaxMindReaders() {
     return { cityReader: cityReaderInstance, asnReader: asnReaderInstance };
 }
 
+// @maxmind/geoip2-node's ReaderModel doesn't expose the underlying mmdb-lib
+// Reader (and its `metadata.buildEpoch`) through any public API — `mmdbReader`
+// is only TS-`private`, which is erased at runtime, so it's still a real
+// accessible property. Wrapped defensively in case that internal shape
+// changes on a future library upgrade.
+function getBuildDate(readerModel) {
+    try {
+        const epoch = readerModel?.mmdbReader?.metadata?.buildEpoch;
+        return epoch instanceof Date ? epoch : null;
+    } catch {
+        return null;
+    }
+}
+
+function getMaxMindBuildDates() {
+    const { cityReader, asnReader } = getMaxMindReaders();
+    return {
+        cityDbDate: getBuildDate(cityReader),
+        asnDbDate: getBuildDate(asnReader),
+    };
+}
+
 module.exports = {
     initializeMaxMind,
     getMaxMindReaders,
+    getMaxMindBuildDates,
 };
