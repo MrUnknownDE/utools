@@ -1,19 +1,19 @@
 import { API, detectDualStack } from '../shared.js';
 
 export const page = {
-  title: 'Verbindungsdiagnose',
+  title: 'Connection Test',
 
   template: () => `
 <div class="container mx-auto max-w-5xl glass-panel rounded-xl shadow-2xl p-6 md:p-8 backdrop-blur-xl border border-gray-800/50">
-  <h1 class="text-3xl font-bold mb-2 text-center text-gradient">Verbindungsdiagnose</h1>
-  <p class="text-center text-gray-500 text-sm mb-8">Teste die Qualität deiner eigenen Verbindung zu diesem Server.</p>
+  <h1 class="text-3xl font-bold mb-2 text-center text-gradient">Connection Test</h1>
+  <p class="text-center text-gray-500 text-sm mb-8">Test the quality of your own connection to this server.</p>
 
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
     <!-- Dual-Stack -->
     <div class="p-6 glass-card rounded-xl fade-in" style="animation-delay:.05s">
       <h3 class="text-lg font-semibold text-purple-300 flex items-center gap-2 mb-4">
         <div class="w-1.5 h-6 bg-purple-500 rounded-full"></div>
-        Dual-Stack-Support
+        Dual-Stack Support
       </h3>
       <div class="space-y-3">
         <div class="flex items-center gap-3">
@@ -35,13 +35,13 @@ export const page = {
     <div class="p-6 glass-card rounded-xl fade-in" style="animation-delay:.1s">
       <h3 class="text-lg font-semibold text-purple-300 flex items-center gap-2 mb-4">
         <div class="w-1.5 h-6 bg-purple-500 rounded-full"></div>
-        Verbindungsprotokoll
+        Connection Protocol
       </h3>
       <div class="flex items-center gap-3 mb-3">
         <div id="diag-protocol-loader" class="loader" style="width:14px;height:14px;border-width:2px"></div>
         <span id="diag-protocol-badge" class="hidden inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono"></span>
       </div>
-      <p class="text-xs text-gray-600 leading-relaxed">TLS-Version wird hier nicht angezeigt, da TLS außerhalb dieser Anwendung terminiert wird (Reverse Proxy vor diesem Deployment) und weder Backend noch Nginx Zugriff auf die vom Browser ausgehandelte TLS-Version haben.</p>
+      <p class="text-xs text-gray-600 leading-relaxed">TLS version isn't shown here because TLS is terminated outside this application (a reverse proxy in front of this deployment), and neither the backend nor Nginx have access to the TLS version negotiated with the browser.</p>
     </div>
   </div>
 
@@ -50,11 +50,11 @@ export const page = {
     <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
       <h3 class="text-lg font-semibold text-purple-300 flex items-center gap-2">
         <div class="w-1.5 h-6 bg-purple-500 rounded-full"></div>
-        Latenz, Jitter &amp; Paketverlust
+        Latency, Jitter &amp; Packet Loss
       </h3>
       <button id="diag-latency-btn"
         class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-lg shadow-lg transition-all duration-200 text-sm">
-        Test starten
+        Start Test
       </button>
     </div>
     <div id="diag-latency-loader" class="loader hidden mx-auto"></div>
@@ -76,7 +76,7 @@ export const page = {
         <p id="diag-lat-jitter" class="text-2xl font-bold font-mono text-yellow-300">-</p>
       </div>
       <div class="bg-gray-900/50 rounded-lg p-4 text-center border border-gray-700/30">
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Paketverlust</p>
+        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Packet Loss</p>
         <p id="diag-lat-loss" class="text-2xl font-bold font-mono text-green-400">-</p>
       </div>
     </div>
@@ -91,11 +91,11 @@ export const page = {
     <div class="flex gap-3 flex-wrap mb-4">
       <button id="diag-download-btn"
         class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-lg shadow-lg transition-all duration-200 text-sm">
-        Download testen
+        Test Download
       </button>
       <button id="diag-upload-btn"
         class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-2.5 px-5 rounded-lg shadow-lg transition-all duration-200 text-sm">
-        Upload testen
+        Test Upload
       </button>
     </div>
     <div id="diag-speed-bar-track" class="speed-bar-track mb-4 hidden">
@@ -134,8 +134,8 @@ export const page = {
       document.getElementById('diag-v4-loader')?.remove();
       document.getElementById('diag-v6-loader')?.remove();
 
-      setBadge(document.getElementById('diag-v4-badge'), !!ipv4, 'erreichbar', 'nicht erreichbar');
-      setBadge(document.getElementById('diag-v6-badge'), !!ipv6, 'erreichbar', 'nicht erreichbar');
+      setBadge(document.getElementById('diag-v4-badge'), !!ipv4, 'reachable', 'unreachable');
+      setBadge(document.getElementById('diag-v6-badge'), !!ipv6, 'reachable', 'unreachable');
       if (ipv4) document.getElementById('diag-v4-ip').textContent = ipv4;
       if (ipv6) document.getElementById('diag-v6-ip').textContent = ipv6;
     }
@@ -159,7 +159,7 @@ export const page = {
           const entry = list.getEntries().find(e => e.name.includes('/api/echo'));
           if (!entry) return;
           observer.disconnect();
-          renderProtocol(entry.nextHopProtocol || 'unbekannt');
+          renderProtocol(entry.nextHopProtocol || 'unknown');
         });
         try {
           observer.observe({ type: 'resource', buffered: true });
@@ -169,7 +169,7 @@ export const page = {
       fetch(`${API}/echo`, { cache: 'no-store' }).catch(() => {});
 
       // Fallback for browsers without (working) resource-timing support
-      setTimeout(() => renderProtocol('unbekannt'), 3000);
+      setTimeout(() => renderProtocol('unknown'), 3000);
     }
 
     // ── Latency / Jitter / Packet loss ─────────────────────────
@@ -302,7 +302,7 @@ export const page = {
           const bytes = Math.min(10 * 1024 * 1024, cfg.maxDownloadBytes);
           const t0 = performance.now();
           const r = await fetch(`${API}/speedtest/download?bytes=${bytes}`, { cache: 'no-store' });
-          if (!r.ok) throw new Error(`Download-Test fehlgeschlagen (HTTP ${r.status})`);
+          if (!r.ok) throw new Error(`Download test failed (HTTP ${r.status})`);
           await r.arrayBuffer();
           const seconds = (performance.now() - t0) / 1000;
           const mbps = (bytes * 8 / 1e6) / seconds;
@@ -320,7 +320,7 @@ export const page = {
             headers: { 'Content-Type': 'application/octet-stream' },
             body: payload,
           });
-          if (!r.ok) throw new Error(`Upload-Test fehlgeschlagen (HTTP ${r.status})`);
+          if (!r.ok) throw new Error(`Upload test failed (HTTP ${r.status})`);
           const seconds = (performance.now() - t0) / 1000;
           const mbps = (bytes * 8 / 1e6) / seconds;
           document.getElementById('diag-speed-up').textContent = `${mbps.toFixed(1)} Mbit/s`;

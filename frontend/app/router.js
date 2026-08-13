@@ -105,8 +105,8 @@ fetch('/api/version')
       // but fall back to whichever is present in case they ever diverge.
       const date = d.cityDbDate || d.asnDbDate;
       geoipEl.textContent = date
-        ? new Date(date).toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' })
-        : 'unbekannt';
+        ? new Date(date).toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' })
+        : 'unknown';
     }
   })
   .catch(() => {
