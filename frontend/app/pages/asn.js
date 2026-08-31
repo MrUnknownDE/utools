@@ -72,12 +72,17 @@ export const page = {
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-[var(--color-link)]"></span>Upstream</span>
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-[var(--color-accent)]"></span>This AS</span>
           <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-[var(--color-status-good)]"></span>Downstream</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full" style="border:1.5px dashed var(--color-accent); background:transparent"></span>Shared IXP capacity known</span>
         </div>
         <span class="ml-auto text-xs text-[var(--color-text-dim)]">Scroll to zoom · Drag to pan · Click node to open</span>
       </div>
       <div id="graph-container">
         <svg id="graph-svg"></svg>
         <div id="graph-tooltip"></div>
+      </div>
+      <div class="flex items-center justify-between flex-wrap gap-2 mt-2 text-xs text-[var(--color-text-dim)]">
+        <span>Node size &amp; line thickness ∝ RIPE peering weight — bigger isn't necessarily faster, just more visible in the global routing table. A dashed ring + copper speed tag (e.g. <span class="tag" style="color:var(--color-accent); border-color:var(--color-accent)">10G</span>) means this AS shares a public exchange with that neighbour — see the tables below for details per exchange.</span>
+        <span id="graph-truncated-note" class="hidden font-mono"></span>
       </div>
     </div>
 
@@ -99,7 +104,8 @@ export const page = {
     </div>
 
     <div class="card p-5">
-      <h3 class="text-sm font-label font-bold text-[var(--color-text-dim)] uppercase tracking-widest mb-3">Direct Neighbours <span class="text-xs font-normal text-[var(--color-text-dim)]">(Level 2 · via RIPE Stat)</span></h3>
+      <h3 class="text-sm font-label font-bold text-[var(--color-text-dim)] uppercase tracking-widest mb-1">Direct Neighbours <span class="text-xs font-normal text-[var(--color-text-dim)]">(Level 2 · via RIPE Stat)</span></h3>
+      <p class="text-xs text-[var(--color-text-dim)] mb-3">A speed tag (e.g. <span class="tag">10G</span>) means this AS and the neighbour share a public exchange point — the tag is the lower of the two ports' speeds there, via PeeringDB. Not the same as actual traffic or a dedicated link.</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <h4 class="text-xs font-label font-semibold text-[var(--color-link)] mb-2">↑ Upstreams (Transit Providers)</h4>
@@ -212,6 +218,23 @@ export const page = {
       if (data.graph) renderGraph(data.graph);
     }
 
+    // PeeringDB reports port speeds in Mbit/s.
+    function fmtSpeed(mbps) {
+      if (mbps == null) return '';
+      return mbps >= 1000 ? `${mbps / 1000}G` : `${mbps}M`;
+    }
+
+    // The fastest shared exchange, used as the at-a-glance capacity figure —
+    // full per-IXP breakdown is in the tooltip.
+    function bestSharedIxp(sharedIxps) {
+      if (!sharedIxps?.length) return null;
+      return sharedIxps.reduce((best, ix) => {
+        const cap = Math.min(ix.ourSpeed || 0, ix.theirSpeed || 0);
+        const bestCap = best ? Math.min(best.ourSpeed || 0, best.theirSpeed || 0) : -1;
+        return cap > bestCap ? ix : best;
+      }, null);
+    }
+
     function renderPrefixes(prefixes) {
       const list   = document.getElementById('prefix-list');
       const empty  = document.getElementById('prefix-empty');
@@ -236,7 +259,7 @@ export const page = {
       list.innerHTML = ixps.map(ix => `
         <div class="ixp-row py-1.5 flex items-center justify-between gap-2 text-sm">
           <span class="text-[var(--color-text)] truncate">${ix.name}</span>
-          <span class="text-xs text-[var(--color-text-dim)] shrink-0">${ix.speed >= 1000 ? ix.speed / 1000 + 'G' : ix.speed + 'M'}</span>
+          <span class="text-xs text-[var(--color-text-dim)] shrink-0">${fmtSpeed(ix.speed)}</span>
         </div>`).join('');
     }
 
@@ -244,34 +267,76 @@ export const page = {
       const el = document.getElementById(elId);
       if (!nodes?.length) { el.innerHTML = '<p class="text-[var(--color-text-dim)] italic">None reported.</p>'; return; }
       const col = colour === 'link' ? 'text-[var(--color-link)]' : 'text-[var(--color-status-good)]';
-      el.innerHTML = nodes.map(n => `
+      el.innerHTML = nodes.map(n => {
+        const best = bestSharedIxp(n.sharedIxps);
+        const speedTag = best
+          ? `<span class="tag" title="Shared at ${best.name}: ${fmtSpeed(best.ourSpeed)} (us) / ${fmtSpeed(best.theirSpeed)} (them)">${fmtSpeed(Math.min(best.ourSpeed, best.theirSpeed))}</span>`
+          : '';
+        return `
         <div class="flex items-center gap-2 py-0.5 hover:bg-white/5 rounded px-1 cursor-pointer group"
              onclick="window._router.navigate('/asn',{asn:'${n.asn}'})">
           <span class="${col} font-bold w-14 shrink-0">AS${n.asn}</span>
           <span class="text-[var(--color-text-muted)] truncate flex-1 group-hover:text-[var(--color-text)]">${n.name || '—'}</span>
+          ${speedTag}
           <span class="text-[var(--color-text-dim)] shrink-0">${n.power ? 'pwr:' + n.power : ''}</span>
-        </div>`).join('');
+        </div>`;
+      }).join('');
     }
+
+    const GRAPH_VISIBLE_PER_SIDE = 15;
 
     function renderGraph(graph) {
       const container = document.getElementById('graph-container');
       const svg = d3.select('#graph-svg');
       svg.selectAll('*').remove();
-      const W = container.clientWidth, H = container.clientHeight;
+      const W = container.clientWidth;
 
       const nodeMap = new Map();
-      function addNode(asn, name, role) {
+      function addNode(asn, name, role, extra) {
         const key = String(asn);
-        if (!nodeMap.has(key)) nodeMap.set(key, { id: key, asn, name: name || `AS${asn}`, role });
+        if (!nodeMap.has(key)) nodeMap.set(key, { id: key, asn, name: name || `AS${asn}`, role, ...extra });
       }
-      addNode(graph.center.asn, graph.center.name, 'center');
-      const vizUp   = graph.level2.upstreams.slice(0, 15);
-      const vizDown = graph.level2.downstreams.slice(0, 15);
-      vizUp.forEach(n => addNode(n.asn, n.name, 'upstream'));
-      vizDown.forEach(n => addNode(n.asn, n.name, 'downstream'));
-      graph.level3.forEach(d => d.upstreams.forEach(n => addNode(n.asn, n.name, 'tier1')));
+      addNode(graph.center.asn, graph.center.name, 'center', { power: null });
+      const vizUp   = graph.level2.upstreams.slice(0, GRAPH_VISIBLE_PER_SIDE);
+      const vizDown = graph.level2.downstreams.slice(0, GRAPH_VISIBLE_PER_SIDE);
+      vizUp.forEach(n => addNode(n.asn, n.name, 'upstream', { power: n.power, v4: n.v4, v6: n.v6, sharedIxps: n.sharedIxps }));
+      vizDown.forEach(n => addNode(n.asn, n.name, 'downstream', { power: n.power, v4: n.v4, v6: n.v6, sharedIxps: n.sharedIxps }));
+      graph.level3.forEach(d => d.upstreams.forEach(n => addNode(n.asn, n.name, 'tier1', { power: n.power })));
+
+      // Note when the graph only shows a slice of the real neighbour count —
+      // the full list is still in the tables below, but this isn't obvious
+      // from the graph alone otherwise.
+      const truncatedNote = document.getElementById('graph-truncated-note');
+      const hiddenUp   = Math.max(0, graph.level2.upstreams.length - vizUp.length);
+      const hiddenDown = Math.max(0, graph.level2.downstreams.length - vizDown.length);
+      if (hiddenUp || hiddenDown) {
+        const parts = [];
+        if (hiddenUp)   parts.push(`+${hiddenUp} upstream${hiddenUp   > 1 ? 's' : ''}`);
+        if (hiddenDown) parts.push(`+${hiddenDown} downstream${hiddenDown > 1 ? 's' : ''}`);
+        truncatedNote.textContent = `${parts.join(', ')} not shown (see tables below)`;
+        truncatedNote.classList.remove('hidden');
+      } else {
+        truncatedNote.classList.add('hidden');
+      }
 
       const nodes  = Array.from(nodeMap.values());
+
+      // In dense graphs (300+ upstreams etc.) a two-line label per node is
+      // unreadable clutter — drop the name line per crowded column and rely
+      // on the AS-number line + the hover tooltip (which always has the name).
+      const NAME_LABEL_CROWD_THRESHOLD = 10;
+      const countByRole = {};
+      nodes.forEach(n => { countByRole[n.role] = (countByRole[n.role] || 0) + 1; });
+
+      // The container is a fixed 600px in CSS, which is nowhere near enough
+      // room to space out 15 nodes-with-labels in a single column without
+      // them (and their rings/speed tags) overlapping — grow it to fit the
+      // most crowded column instead of squeezing everything into 600px.
+      const NODE_ROW_PX = 52;
+      const maxColumnCount = Math.max(countByRole.upstream || 0, countByRole.downstream || 0, countByRole.tier1 || 0, 1);
+      container.style.height = `${Math.max(600, maxColumnCount * NODE_ROW_PX + 60)}px`;
+      const H = container.clientHeight;
+
       const links  = [];
       const cid    = String(graph.center.asn);
       vizUp.forEach(n => links.push({ source: String(n.asn), target: cid, type: 'upstream', power: n.power || 1 }));
@@ -282,15 +347,37 @@ export const page = {
       const layerX = { tier1: W * 0.08, upstream: W * 0.3, center: W * 0.55, downstream: W * 0.8 };
       nodes.forEach(n => { n.fx = layerX[n.role] ?? W / 2; });
 
-      const maxPow     = Math.max(...uniqueLinks.map(l => l.power), 1);
-      const strokeSc   = d3.scaleLinear().domain([0, maxPow]).range([0.5, 4]);
-      const nodeRadius = { center: 20, upstream: 11, downstream: 11, tier1: 8 };
+      // Fix Y positions to an even ladder per column instead of leaving them
+      // to forceY/collide — with 15 same-column nodes, forceY's pull-to-
+      // center keeps re-compressing them into overlapping clumps with dead
+      // space at the edges no matter how they're seeded, since it's a
+      // continuous spring rather than a one-off layout pass. Vertical order
+      // also isn't arbitrary: upstreams/downstreams already arrive sorted by
+      // peering weight, so this doubles as "biggest neighbour near the
+      // middle" — matches Level 3 (tier1) too via the same nodes array.
+      // Dragging a node still frees it (drag handler clears fy on release).
+      const byRole = {};
+      nodes.forEach(n => { (byRole[n.role] ??= []).push(n); });
+      Object.values(byRole).forEach(list => {
+        if (list.length === 1) { list[0].y = list[0].fy = H / 2; return; }
+        const margin = 40, usable = H - margin * 2;
+        list.forEach((n, i) => { n.y = n.fy = margin + (usable * i) / (list.length - 1); });
+      });
+
+      const maxPow      = Math.max(...uniqueLinks.map(l => l.power), 1);
+      const strokeSc    = d3.scaleLinear().domain([0, maxPow]).range([0.5, 4]);
+      const baseRadius  = { center: 20, upstream: 9, downstream: 9, tier1: 7 };
+      const maxNodePow  = Math.max(...nodes.map(n => n.power || 0), 1);
+      // Square-root scale so circle *area* (not radius) tracks peering weight
+      // roughly linearly — otherwise big neighbours visually dominate too much.
+      const radiusBump  = d3.scaleSqrt().domain([0, maxNodePow]).range([0, 9]);
+      const radiusFor   = d => d.role === 'center' ? baseRadius.center : baseRadius[d.role] + radiusBump(d.power || 0);
 
       const sim = d3.forceSimulation(nodes)
         .force('link', d3.forceLink(uniqueLinks).id(d => d.id).distance(d => d.type === 'tier1' ? 90 : 120).strength(0.6))
         .force('charge', d3.forceManyBody().strength(-220))
         .force('y', d3.forceY(H / 2).strength(0.04))
-        .force('collide', d3.forceCollide().radius(d => nodeRadius[d.role] + 14))
+        .force('collide', d3.forceCollide().radius(d => radiusFor(d) + 16))
         .alphaDecay(0.025);
 
       const g = svg.append('g');
@@ -307,7 +394,18 @@ export const page = {
         .on('click', (_, d) => { if (d.role !== 'center') window._router.navigate('/asn', { asn: d.asn }); })
         .on('mouseenter', (_, d) => {
           tooltip.style.opacity = '1';
-          tooltip.innerHTML = `<strong class="text-[var(--color-accent-strong)]">AS${d.asn}</strong><br><span class="text-[var(--color-text)]">${d.name}</span><br><span class="text-[var(--color-text-dim)] text-xs capitalize">${d.role === 'tier1' ? 'Tier-1 / Transit' : d.role}</span>`;
+          const roleLabel = d.role === 'tier1' ? 'Tier-1 / Transit' : d.role;
+          const detailBits = [];
+          if (d.power != null) detailBits.push(`peering weight ${d.power}`);
+          if (d.v4 != null) detailBits.push(`${d.v4} IPv4 peer${d.v4 === 1 ? '' : 's'}`);
+          if (d.v6 != null) detailBits.push(`${d.v6} IPv6 peer${d.v6 === 1 ? '' : 's'}`);
+          const detail = detailBits.length ? `<br><span class="text-[var(--color-text-dim)] text-xs">${detailBits.join(' · ')}</span>` : '';
+          const sharedLines = (d.sharedIxps || [])
+            .map(ix => `${ix.name}: ${fmtSpeed(ix.ourSpeed)} (us) / ${fmtSpeed(ix.theirSpeed)} (them)`);
+          const shared = sharedLines.length
+            ? `<br><span class="text-[var(--color-link)] text-xs">Shared IXP capacity<br>${sharedLines.join('<br>')}</span>`
+            : '';
+          tooltip.innerHTML = `<strong class="text-[var(--color-accent-strong)]">AS${d.asn}</strong><br><span class="text-[var(--color-text)]">${d.name}</span><br><span class="text-[var(--color-text-dim)] text-xs capitalize">${roleLabel}</span>${detail}${shared}`;
         })
         .on('mousemove', evt => {
           const r = container.getBoundingClientRect();
@@ -321,15 +419,47 @@ export const page = {
           .on('drag',  (evt, d) => { d.fy = evt.y; })
           .on('end',   (evt, d) => { if (!evt.active) sim.alphaTarget(0); d.fy = null; }));
 
-      node.append('circle').attr('r', d => nodeRadius[d.role]);
-      node.append('text').attr('dy', d => nodeRadius[d.role] + 13).attr('font-size', d => d.role === 'center' ? 12 : 9).text(d => `AS${d.asn}`);
-      node.append('text').attr('dy', d => nodeRadius[d.role] + 23)
+      // Whether the (already-truncated) name line is shown for this node —
+      // used both for the name text itself and to decide where the capacity
+      // speed label goes underneath it.
+      function nameShown(d) {
+        if (!d.name) return false;
+        if (d.role !== 'center' && countByRole[d.role] > NAME_LABEL_CROWD_THRESHOLD) return false;
+        return true;
+      }
+
+      node.append('circle').attr('r', radiusFor);
+
+      // Dashed accent ring — an at-a-glance "this neighbour's shared-IXP
+      // capacity is known" marker, without having to hover every node.
+      // Styled via .capacity-ring in CSS (not inline attrs) because the
+      // .node-{role} circle rules would otherwise win the fill/stroke.
+      node.append('circle')
+        .attr('class', 'capacity-ring')
+        .attr('r', d => radiusFor(d) + 3)
+        .attr('display', d => bestSharedIxp(d.sharedIxps) ? null : 'none');
+
+      node.append('text').attr('dy', d => radiusFor(d) + 13).attr('font-size', d => d.role === 'center' ? 12 : 9).text(d => `AS${d.asn}`);
+      node.append('text').attr('dy', d => radiusFor(d) + 23)
         .attr('font-size', d => d.role === 'tier1' ? 7 : 8)
         .attr('fill', d => d.role === 'tier1' ? '#6b7280' : '#9ca3af')
         .text(d => {
-          if (!d.name) return '';
+          if (!nameShown(d)) return '';
           const max = d.role === 'center' ? 22 : d.role === 'tier1' ? 12 : 16;
           return d.name.length > max ? d.name.slice(0, max) + '…' : d.name;
+        });
+
+      // Compact copper speed tag under whichever line is the last one shown —
+      // only rendered for nodes that actually have shared-IXP data, so it
+      // stays sparse even in crowded columns.
+      node.append('text')
+        .attr('dy', d => radiusFor(d) + (nameShown(d) ? 33 : 23))
+        .attr('font-size', 8)
+        .attr('font-weight', 700)
+        .attr('fill', 'var(--color-accent)')
+        .text(d => {
+          const best = bestSharedIxp(d.sharedIxps);
+          return best ? fmtSpeed(Math.min(best.ourSpeed, best.theirSpeed)) : '';
         });
 
       sim.on('tick', () => {

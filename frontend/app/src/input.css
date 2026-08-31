@@ -579,7 +579,29 @@
   .node-upstream circle { fill: var(--color-link); stroke: var(--color-link-strong); stroke-width: 1.5; }
   .node-downstream circle { fill: var(--color-status-good); stroke: #6ee7b7; stroke-width: 1.5; }
   .node-tier1 circle { fill: var(--color-status-neutral); stroke: #9ca3af; stroke-width: 1.5; }
-  .node text { fill: var(--color-text); font-size: 11px; font-family: var(--font-mono); pointer-events: none; text-anchor: middle; }
+  /* Higher specificity than the role circles above (two classes vs. one
+     class + element) so this wins regardless of source order — otherwise
+     the role rules' fill/stroke silently swallow this ring. */
+  .node .capacity-ring {
+    fill: none;
+    stroke: var(--color-accent);
+    stroke-width: 1.5;
+    stroke-dasharray: 2 2;
+    pointer-events: none;
+  }
+  .node text {
+    fill: var(--color-text);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    pointer-events: none;
+    text-anchor: middle;
+    /* Halo behind the glyphs so labels stay legible over criss-crossing
+       links in dense graphs (e.g. Cloudflare/Google-sized ASes). */
+    paint-order: stroke;
+    stroke: var(--color-panel-inset);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
   .node:hover circle { filter: brightness(1.4); cursor: pointer; }
   .link { stroke: rgba(255,255,255,.12); stroke-linecap: round; }
   .link-upstream { stroke: rgba(41, 211, 238, .35); }

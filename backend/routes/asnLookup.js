@@ -49,6 +49,18 @@ function setCache(key, data) {
     }
 }
 
+// Unlike getCached() (which collapses "not cached" and "cached as null" into
+// the same `null` return), this distinguishes them — needed by the PeeringDB
+// batch fetch below to know which ASNs still need to go into the batch query.
+function cacheEntryValid(key) {
+    try {
+        const entry = JSON.parse(fs.readFileSync(cacheFilePath(key), 'utf8'));
+        return Date.now() <= entry.expiresAt;
+    } catch {
+        return false;
+    }
+}
+
 // ─── HTTP Helper ──────────────────────────────────────────────────────────────
 function fetchJson(url) {
     return new Promise((resolve, reject) => {
@@ -148,6 +160,7 @@ async function fetchPeeringDb(asn) {
             infoScope: net.info_scope || null,
             website: net.website || null,
             ixps: (net.netixlan_set || []).map(ix => ({
+                ixId: ix.ix_id,
                 name: ix.name,
                 speed: ix.speed,
                 ipv4: ix.ipaddr4 || null,
@@ -160,6 +173,63 @@ async function fetchPeeringDb(asn) {
         logger.warn({ asn, error: e.message }, 'PeeringDB fetch failed');
         return null;
     }
+}
+
+// Batch-fetches PeeringDB records for many neighbour ASNs in a single request
+// (PeeringDB's own guidance: batch via asn__in instead of one request per
+// ASN — anonymous API access is rate-limited to 20 req/min, and a single ASN
+// lookup here can have 30+ visible neighbours). Cache-aware: only ASNs
+// without a live cache entry are actually included in the request, since the
+// same major transit providers (AS174, AS6461, AS1299, ...) show up as a
+// neighbour of a huge fraction of all lookups.
+async function fetchPeeringDbBatch(asnList) {
+    const result = {};
+    const toFetch = asnList.filter(a => !cacheEntryValid(`peeringdb:${a}`));
+    asnList.forEach(a => { if (!toFetch.includes(a)) result[a] = getCached(`peeringdb:${a}`); });
+    if (!toFetch.length) return result;
+
+    try {
+        const json = await fetchJson(`https://www.peeringdb.com/api/net?asn__in=${toFetch.join(',')}&depth=2`);
+        const found = new Set();
+        for (const net of (json?.data || [])) {
+            found.add(net.asn);
+            const entry = {
+                peeringPolicy: net.policy_general || null,
+                infoType: net.info_type || null,
+                infoTraffic: net.info_traffic || null,
+                infoRatio: net.info_ratio || null,
+                infoScope: net.info_scope || null,
+                website: net.website || null,
+                ixps: (net.netixlan_set || []).map(ix => ({
+                    ixId: ix.ix_id,
+                    name: ix.name,
+                    speed: ix.speed,
+                    ipv4: ix.ipaddr4 || null,
+                    ipv6: ix.ipaddr6 || null,
+                })).slice(0, 20),
+            };
+            setCache(`peeringdb:${net.asn}`, entry);
+            result[net.asn] = entry;
+        }
+        toFetch.forEach(a => { if (!found.has(a)) { setCache(`peeringdb:${a}`, null); result[a] = null; } });
+    } catch (e) {
+        logger.warn({ error: e.message, count: toFetch.length }, 'PeeringDB batch fetch failed');
+        toFetch.forEach(a => { if (!(a in result)) result[a] = null; });
+    }
+    return result;
+}
+
+// Cross-references a neighbour's PeeringDB IXP presence against the searched
+// AS's own — a shared exchange with known port speeds on both sides is the
+// closest thing to a real "how much capacity could flow here" figure that's
+// actually derivable from public data (true point-to-point link capacity
+// between two arbitrary ASes is simply not published anywhere).
+function computeSharedIxps(ourIxps, theirIxps) {
+    if (!ourIxps?.length || !theirIxps?.length) return [];
+    const ourByIxId = new Map(ourIxps.filter(ix => ix.ixId != null).map(ix => [ix.ixId, ix]));
+    return theirIxps
+        .filter(ix => ix.ixId != null && ourByIxId.has(ix.ixId))
+        .map(ix => ({ name: ix.name, ourSpeed: ourByIxId.get(ix.ixId).speed, theirSpeed: ix.speed }));
 }
 
 // ─── Resolve names for a list of ASNs ────────────────────────────────────────
@@ -216,6 +286,19 @@ router.get('/', async (req, res, next) => {
         ].map(n => n.asn))];
         const level2Names = await resolveNames(topLevel2Asns);
 
+        // Shared-IXP port speeds for the same Top 25 neighbours — one batched
+        // PeeringDB request (see fetchPeeringDbBatch) rather than one per
+        // neighbour. Skipped entirely if the searched AS has no PeeringDB
+        // presence itself, since there'd be nothing to cross-reference against.
+        let neighbourIxpsByAsn = {};
+        if (peeringdb?.ixps?.length && topLevel2Asns.length) {
+            const neighbourPeeringDb = await fetchPeeringDbBatch(topLevel2Asns);
+            for (const a of topLevel2Asns) {
+                const shared = computeSharedIxps(peeringdb.ixps, neighbourPeeringDb[a]?.ixps);
+                if (shared.length) neighbourIxpsByAsn[a] = shared;
+            }
+        }
+
         // Level 3: fetch upstreams-of-upstreams for top 5 Level 2 upstreams
         const level3Raw = await Promise.allSettled(
             allUpstreams.slice(0, 5).map(async (upstreamNode) => {
@@ -240,8 +323,8 @@ router.get('/', async (req, res, next) => {
         const graph = {
             center: { asn, name: overview.name },
             level2: {
-                upstreams: allUpstreams.map(n => ({ asn: n.asn, name: level2Names[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers })),
-                downstreams: allDownstreams.map(n => ({ asn: n.asn, name: level2Names[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers })),
+                upstreams: allUpstreams.map(n => ({ asn: n.asn, name: level2Names[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers, sharedIxps: neighbourIxpsByAsn[n.asn] || [] })),
+                downstreams: allDownstreams.map(n => ({ asn: n.asn, name: level2Names[n.asn] || null, power: n.power, v4: n.v4_peers, v6: n.v6_peers, sharedIxps: neighbourIxpsByAsn[n.asn] || [] })),
             },
             level3: level3Data.map(d => ({
                 parentAsn: d.parentAsn,
