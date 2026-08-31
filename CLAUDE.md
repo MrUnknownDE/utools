@@ -106,6 +106,7 @@ Browser → Nginx (port 8080)
 | `GET /api/asn-lookup` | JSON | ASN details (cached to filesystem) |
 | `GET /api/mac-lookup` | JSON | MAC OUI vendor lookup |
 | `GET /api/version` | JSON | Git commit SHA |
+| `GET /api/map-config` | JSON | CARTO basemap API key for the Leaflet map |
 
 Streaming endpoints use Server-Sent Events (EventSource). Nginx is configured with `proxy_buffering off` for these.
 
@@ -134,6 +135,7 @@ See `backend/example.env`. Key variables:
 | `RATE_LIMIT_MAX` | `200` | Max requests per window |
 | `RATE_LIMIT_WINDOW_MS` | `300000` | Rate limit window (5 min) |
 | `SENTRY_DSN` | — | Sentry ingest URL |
+| `CARTO_API_KEY` | — | CARTO basemap API key for the Leaflet map (optional, degrades to placeholder tiles) |
 | `ASN_CACHE_DIR` | — | Directory for ASN response cache |
 | `MAXMIND_ACCOUNT_ID` | — | MaxMind account ID (enables daily DB auto-update) |
 | `MAXMIND_LICENSE_KEY` | — | MaxMind license key (enables daily DB auto-update) |

@@ -22,6 +22,9 @@ services:
       SPEEDTEST_ENABLED: "true"
       SPEEDTEST_MAX_DOWNLOAD_MB: 25
       SPEEDTEST_MAX_UPLOAD_MB: 25
+      # CARTO basemap API key for the home page's Leaflet map (see backend/example.env)
+      # — optional; without it the map still loads, just with placeholder tiles
+      CARTO_API_KEY: ${CARTO_API_KEY:-}
     volumes:
       # Persistent ASN lookup cache — survives container restarts
       - asn_cache:/app/asn-cache

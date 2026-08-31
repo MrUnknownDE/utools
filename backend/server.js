@@ -37,6 +37,7 @@ const privacyRoutes   = require('./routes/privacy');
 const myipRoutes      = require('./routes/myip');
 const echoRoutes      = require('./routes/echo');
 const speedtestRoutes = require('./routes/speedtest');
+const mapConfigRoutes = require('./routes/mapConfig');
 
 // --- Logger Initialisierung ---
 const logger = pino({
@@ -126,6 +127,7 @@ app.use('/api/mac-lookup', macLookupRoutes);
 app.use('/api/asn-lookup', asnLookupRoutes);
 app.use('/api/privacy',   privacyRoutes);
 app.use('/api/myip',      myipRoutes);
+app.use('/api/map-config', mapConfigRoutes);
 
 
 // Sentry error handler — must be after routes, before custom error handler

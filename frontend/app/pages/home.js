@@ -371,6 +371,15 @@ export const page = {
     // ── State ────────────────────────────────────────────────────
     let currentIp = null, currentLookupIp = null;
     let eventSource = null, portScanEventSource = null;
+    let cartoApiKey = null;
+
+    async function loadMapConfig() {
+      try {
+        const r = await fetch(`${API}/map-config`);
+        const d = await r.json();
+        cartoApiKey = d.cartoApiKey || null;
+      } catch { /* map tiles just fall back to CARTO's unkeyed placeholder */ }
+    }
 
     // ── Helpers ──────────────────────────────────────────────────
     function showGlobalErr(msg) {
@@ -431,7 +440,8 @@ export const page = {
         } else {
           try {
             inst = L.map(mapId).setView([lat, lon], 13);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            const keyParam = cartoApiKey ? `?key=${encodeURIComponent(cartoApiKey)}` : '';
+            L.tileLayer(`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${keyParam}`, {
               attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
               subdomains: 'abcd', maxZoom: 19
             }).addTo(inst);
@@ -970,11 +980,15 @@ export const page = {
 
     // ── Bootstrap ────────────────────────────────────────────────
     populateBrowserFingerprint();
-    fetchIpInfo();
+    // Map config must resolve before any map is created, otherwise the very
+    // first Leaflet instance would be built without the CARTO key.
+    loadMapConfig().then(() => {
+      fetchIpInfo();
 
-    const params = new URLSearchParams(search);
-    const ipParam = params.get('ip');
-    if (ipParam) { lookupInput.value = ipParam; syncLookupBtn(); doLookup(ipParam); }
+      const params = new URLSearchParams(search);
+      const ipParam = params.get('ip');
+      if (ipParam) { lookupInput.value = ipParam; syncLookupBtn(); doLookup(ipParam); }
+    });
 
     // ── Cleanup ──────────────────────────────────────────────────
     return () => {
