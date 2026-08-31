@@ -22,6 +22,7 @@ const rateLimit = require('express-rate-limit'); // Rate limiting middleware
 
 // Import local modules
 const { initializeMaxMind } = require('./maxmind'); // MaxMind DB initialization
+const { updateDatabases, databasesExist, scheduleDailyUpdates } = require('./geoipUpdater'); // Daily MaxMind DB auto-update
 const ipinfoRoutes = require('./routes/ipinfo');
 const pingRoutes = require('./routes/ping');
 const tracerouteRoutes = require('./routes/traceroute');
@@ -156,18 +157,23 @@ app.use((err, req, res, next) => {
 // --- Server Start ---
 let server; // Variable to hold the server instance for graceful shutdown
 
-// Initialize external resources (like MaxMind DBs) then start the server
-initializeMaxMind().then(() => {
-    server = app.listen(PORT, () => {
-        logger.info({ port: PORT, node_env: process.env.NODE_ENV || 'development' }, `Server listening`);
-        // Log available routes (optional)
-        logger.info(`API base URL: http://localhost:${PORT}/api`);
+// Initialize external resources (MaxMind DBs) then start the server.
+// If no local databases exist yet (e.g. first boot on a fresh volume), download
+// them first; otherwise start immediately and let the daily job refresh later.
+(databasesExist() ? Promise.resolve() : updateDatabases())
+    .then(() => initializeMaxMind())
+    .then(() => {
+        server = app.listen(PORT, () => {
+            logger.info({ port: PORT, node_env: process.env.NODE_ENV || 'development' }, `Server listening`);
+            // Log available routes (optional)
+            logger.info(`API base URL: http://localhost:${PORT}/api`);
+        });
+        scheduleDailyUpdates();
+    }).catch(error => {
+        logger.fatal({ error: error.message, stack: error.stack }, "Server could not start due to initialization errors.");
+        Sentry.captureException(error); // Capture initialization errors
+        process.exit(1); // Exit if initialization fails
     });
-}).catch(error => {
-    logger.fatal({ error: error.message, stack: error.stack }, "Server could not start due to initialization errors.");
-    Sentry.captureException(error); // Capture initialization errors
-    process.exit(1); // Exit if initialization fails
-});
 
 
 // --- Graceful Shutdown ---

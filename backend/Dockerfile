@@ -30,16 +30,15 @@ COPY --from=builder /app/node_modules ./node_modules
 # Copy application code
 COPY . .
 
-# Copy MaxMind data (assuming it's in ./data)
-# Ensure the 'data' directory exists in your project root
-COPY ./data ./data
-
 # Create a non-root user and group
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Create ASN cache directory and set correct ownership BEFORE switching user
-# This ensures the Docker volume mount is writable by appuser
-RUN mkdir -p /app/asn-cache && chown -R appuser:appgroup /app/asn-cache
+# Create the MaxMind data dir and ASN cache directory and set correct ownership
+# BEFORE switching user. The MaxMind .mmdb databases are no longer baked into
+# the image — the backend downloads and refreshes them itself at runtime (see
+# geoipUpdater.js), so this just needs to exist and be writable for that
+# first download and for the Docker volume mount.
+RUN mkdir -p /app/data /app/asn-cache && chown -R appuser:appgroup /app/data /app/asn-cache
 
 # Change ownership of all app files to the new user
 RUN chown -R appuser:appgroup /app

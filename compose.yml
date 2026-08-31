@@ -13,6 +13,11 @@ services:
       SENTRY_DSN: "https://7ea70caba68f548fb96482a573006a7b@o447623.ingest.us.sentry.io/4509062020333568"
       # ASN Cache directory (filesystem persistence across restarts)
       ASN_CACHE_DIR: /app/asn-cache
+      # MaxMind GeoLite2 auto-update (downloaded + refreshed daily by the backend
+      # itself, see backend/geoipUpdater.js) — set these in a local .env file or
+      # the deploying shell's environment, never commit real values here
+      MAXMIND_ACCOUNT_ID: ${MAXMIND_ACCOUNT_ID:?Set MAXMIND_ACCOUNT_ID (see backend/example.env)}
+      MAXMIND_LICENSE_KEY: ${MAXMIND_LICENSE_KEY:?Set MAXMIND_LICENSE_KEY (see backend/example.env)}
       # Speedtest on the /diagnose page — opt-in per deployment (see backend/example.env)
       SPEEDTEST_ENABLED: "true"
       SPEEDTEST_MAX_DOWNLOAD_MB: 25
@@ -20,6 +25,9 @@ services:
     volumes:
       # Persistent ASN lookup cache — survives container restarts
       - asn_cache:/app/asn-cache
+      # Persistent MaxMind GeoLite2 databases — survives container restarts/
+      # redeploys so the backend doesn't have to re-download on every restart
+      - geoip_data:/app/data
     dns:
       - 1.1.1.1
       - 1.0.0.1
@@ -44,7 +52,9 @@ networks:
   utools_network:
     driver: bridge
 
-# Named volume — ASN cache persists across container restarts
+# Named volumes — persist across container restarts
 volumes:
   asn_cache:
+    driver: local
+  geoip_data:
     driver: local

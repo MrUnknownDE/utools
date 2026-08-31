@@ -83,6 +83,10 @@ web_modules/
 .env.production.local
 .env.local
 
+# MaxMind GeoLite2 databases — downloaded/refreshed by the backend at
+# runtime (see backend/geoipUpdater.js), no longer committed via Git LFS
+backend/data/*.mmdb
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

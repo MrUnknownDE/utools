@@ -1,5 +1,9 @@
 docker compose down
 
+# MAXMIND_ACCOUNT_ID / MAXMIND_LICENSE_KEY werden von compose.yml benötigt
+# (siehe backend/example.env) — entweder hier im Environment gesetzt oder in
+# einer .env-Datei im Repo-Root ablegen, die docker compose automatisch lädt.
+
 # Setzt die Git-Commit-Variable für den Build-Prozess
 export GIT_COMMIT_SHA=$(git rev-parse --short HEAD)
 export SENTRY_DSN="https://7ea70caba68f548fb96482a573006a7b@o447623.ingest.us.sentry.io/4509062020333568"

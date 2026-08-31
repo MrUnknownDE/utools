@@ -9,6 +9,20 @@ const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 let cityReaderInstance = null;
 let asnReaderInstance = null;
 
+async function openReaders() {
+    const cityDbPath = process.env.GEOIP_CITY_DB || './data/GeoLite2-City.mmdb';
+    const asnDbPath = process.env.GEOIP_ASN_DB || './data/GeoLite2-ASN.mmdb';
+    logger.info({ cityDbPath, asnDbPath }, 'Database paths');
+
+    // Verwende Promise.all für paralleles Laden
+    const [cityReader, asnReader] = await Promise.all([
+        geoip.Reader.open(cityDbPath),
+        geoip.Reader.open(asnDbPath)
+    ]);
+
+    return { cityReader, asnReader };
+}
+
 async function initializeMaxMind() {
     if (cityReaderInstance && asnReaderInstance) {
         logger.debug('MaxMind databases already loaded.');
@@ -17,15 +31,7 @@ async function initializeMaxMind() {
 
     try {
         logger.info('Loading MaxMind databases...');
-        const cityDbPath = process.env.GEOIP_CITY_DB || './data/GeoLite2-City.mmdb';
-        const asnDbPath = process.env.GEOIP_ASN_DB || './data/GeoLite2-ASN.mmdb';
-        logger.info({ cityDbPath, asnDbPath }, 'Database paths');
-
-        // Verwende Promise.all für paralleles Laden
-        const [cityReader, asnReader] = await Promise.all([
-            geoip.Reader.open(cityDbPath),
-            geoip.Reader.open(asnDbPath)
-        ]);
+        const { cityReader, asnReader } = await openReaders();
 
         cityReaderInstance = cityReader;
         asnReaderInstance = asnReader;
@@ -38,6 +44,16 @@ async function initializeMaxMind() {
         // Wirf den Fehler weiter, damit der Serverstart fehlschlägt
         throw error;
     }
+}
+
+// Re-opens both readers from the files on disk and swaps them in atomically
+// (only after both opened successfully) so the daily update job can hot-reload
+// freshly downloaded databases without dropping in-flight requests.
+async function reloadMaxMind() {
+    const { cityReader, asnReader } = await openReaders();
+    cityReaderInstance = cityReader;
+    asnReaderInstance = asnReader;
+    logger.info('MaxMind databases reloaded.');
 }
 
 // Funktion zum Abrufen der Reader (stellt sicher, dass sie initialisiert wurden)
@@ -74,6 +90,7 @@ function getMaxMindBuildDates() {
 
 module.exports = {
     initializeMaxMind,
+    reloadMaxMind,
     getMaxMindReaders,
     getMaxMindBuildDates,
 };
