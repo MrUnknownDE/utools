@@ -1,0 +1,22 @@
+{
+  "name": "utools-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Build pipeline for the uTools frontend (Tailwind CSS + self-hosted vendor assets)",
+  "scripts": {
+    "build:css": "tailwindcss -i ./app/src/input.css -o ./app/dist/app.css --minify",
+    "build:vendor": "node ./scripts/build-vendor.js",
+    "build": "npm run build:css && npm run build:vendor"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.1.16",
+    "@tailwindcss/cli": "^4.1.16"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.8",
+    "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@fontsource/ibm-plex-sans-condensed": "^5.2.8",
+    "d3": "^7.9.0",
+    "leaflet": "^1.9.4"
+  }
+}

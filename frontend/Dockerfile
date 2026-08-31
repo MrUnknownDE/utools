@@ -1,5 +1,15 @@
-# Stage 1: Build (falls wir später einen Build-Schritt hätten, z.B. für Tailwind Purge)
-# Aktuell nicht nötig, da wir CDN/statische Dateien haben.
+# Stage 1: Build CSS (Tailwind) + self-host vendor assets (Leaflet/D3/fonts)
+FROM node:24-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY app/ ./app/
+COPY scripts/ ./scripts/
+
+RUN npm run build
 
 # Stage 2: Production Environment using Nginx
 FROM nginx:1.31.0-alpine
@@ -13,11 +23,8 @@ RUN rm /etc/nginx/conf.d/default.conf
 # Kopiere unsere eigene Nginx Konfiguration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Kopiere die Frontend-Dateien in das Verzeichnis, das Nginx ausliefert
-COPY app/ .
-# Falls du später CSS-Dateien oder Bilder hast, kopiere sie auch:
-# COPY styles.css .
-# COPY images/ ./images
+# Kopiere die Frontend-Dateien (inkl. der von Stage 1 gebauten CSS-/Vendor-/Font-Artefakte)
+COPY --from=builder /app/app/ .
 
 # Nginx lauscht standardmäßig auf Port 80
 EXPOSE 80

@@ -38,14 +38,17 @@ npm install
 npm start             # or: node server.js
 ```
 
-No lint or test scripts are configured.
+### Frontend (local, without Docker)
 
-### Git LFS
-
-MaxMind databases are stored in Git LFS. After cloning, run:
 ```bash
-git lfs pull
+cd frontend
+npm install
+npm run build   # builds Tailwind CSS (app/dist/) + copies vendor libs/fonts (app/vendor/, app/dist/fonts/)
 ```
+
+`frontend/app/` can then be served by any static file server for local iteration; the backend must be running separately for `/api/*` calls to work.
+
+No lint or test scripts are configured.
 
 ## Architecture
 
@@ -54,15 +57,25 @@ git lfs pull
 ```
 utools/
 ├── backend/          # Node.js Express API (port 3000)
-│   ├── server.js     # Entry point: Express setup, Sentry, middleware, route mounting
-│   ├── maxmind.js    # Singleton MaxMind reader initialization (GeoLite2-City + ASN)
-│   ├── utils.js      # IP/domain/MAC validation helpers
-│   └── routes/       # One file per API endpoint
+│   ├── server.js       # Entry point: Express setup, Sentry, middleware, route mounting
+│   ├── maxmind.js      # Singleton MaxMind reader initialization/reload (GeoLite2-City + ASN)
+│   ├── geoipUpdater.js # Downloads GeoLite2 DBs on first boot + daily refresh job
+│   ├── utils.js        # IP/domain/MAC validation helpers
+│   └── routes/         # One file per API endpoint
 ├── frontend/         # Nginx static server (port 8080)
-│   ├── app/          # Vanilla HTML/JS/CSS (no build step)
-│   │   ├── index.html / script.js   # Main IP info dashboard
-│   │   └── *.html    # Tool-specific pages (dns, whois, mac, subnet, asn)
-│   └── nginx.conf    # Clean URL rewrites + /api/* reverse proxy to backend:3000
+│   ├── app/            # Vanilla JS SPA — one static index.html shell, everything
+│   │   │                 else is a hand-rolled client-side router
+│   │   ├── index.html    # Shared header/nav/footer shell + #app mount point
+│   │   ├── router.js     # Client-side router (swaps #app content, nav highlighting)
+│   │   ├── shared.js     # Shared helpers (fetch base, copy-to-clipboard, renderLed,
+│   │   │                   createLookupPage factory, dual-stack detection)
+│   │   ├── src/input.css # Tailwind entry + "Patchbay" design tokens/components
+│   │   ├── pages/*.js    # One module per route (home, subnet, dns, whois, mac, asn, diagnose)
+│   │   ├── assets/       # Self-hosted favicon etc.
+│   │   ├── dist/, vendor/ # Build output (Tailwind CSS, fonts, Leaflet/D3) — generated, not committed
+│   ├── scripts/build-vendor.js # Copies Leaflet/D3/font files out of node_modules at build time
+│   ├── package.json  # Tailwind CLI build (`npm run build`) — no JS bundler, pages use native ES modules
+│   └── nginx.conf    # Clean URL rewrites (SPA fallback to index.html) + /api/* reverse proxy to backend:3000
 ├── compose.yml       # Production: pulls from Docker Hub
 ├── compose.build.yml # Build: builds images locally
 └── build.sh          # Local build + deploy script
@@ -74,7 +87,7 @@ utools/
 Browser → Nginx (port 8080)
            ├── static files → frontend/app/
            └── /api/*  →  Express backend (port 3000)
-                              ├── MaxMind .mmdb files (GeoLite2 from Git LFS)
+                              ├── MaxMind .mmdb files (self-downloaded, daily refresh)
                               ├── Sentry (error tracking)
                               └── System commands (ping, traceroute via exec)
 ```
@@ -99,7 +112,8 @@ Streaming endpoints use Server-Sent Events (EventSource). Nginx is configured wi
 ### Key Implementation Details
 
 - **Proxy trust:** `app.set('trust proxy', 2)` — backend sits behind Nginx + any upstream proxy.
-- **MaxMind readers** are initialized once at startup (`maxmind.js`) and reused across requests.
+- **MaxMind readers** are initialized at startup (`maxmind.js`) and reused across requests.
+- **MaxMind databases** are downloaded by the backend itself (`geoipUpdater.js`) on first boot if missing, then refreshed on a daily schedule (default 03:00 UTC, `MAXMIND_UPDATE_HOUR_UTC`) via the MaxMind download API, with the readers hot-reloaded in place — no image rebuild needed. Requires `MAXMIND_ACCOUNT_ID` / `MAXMIND_LICENSE_KEY`; without them, auto-update is skipped and `.mmdb` files must be placed in `backend/data/` manually. Persisted to `/app/data` (Docker volume) so restarts don't force a re-download.
 - **ASN cache** is persisted to `/app/asn-cache` (Docker volume) to reduce external calls.
 - **Rate limiting** is configured via env vars (`RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_MS`).
 - **Private IP detection** (RFC1918, loopback, link-local) is handled in `utils.js` before any lookup.
@@ -121,8 +135,10 @@ See `backend/example.env`. Key variables:
 | `RATE_LIMIT_WINDOW_MS` | `300000` | Rate limit window (5 min) |
 | `SENTRY_DSN` | — | Sentry ingest URL |
 | `ASN_CACHE_DIR` | — | Directory for ASN response cache |
+| `MAXMIND_ACCOUNT_ID` | — | MaxMind account ID (enables daily DB auto-update) |
+| `MAXMIND_LICENSE_KEY` | — | MaxMind license key (enables daily DB auto-update) |
+| `MAXMIND_UPDATE_HOUR_UTC` | `3` | UTC hour the daily GeoLite2 update job runs at |
 
 ### CI/CD
 
-- **`docker-build-push.yml`**: Triggered on push to `main`. Builds multi-arch images (`linux/amd64`, `linux/arm64`) and pushes to Docker Hub as `mrunknownde/utools-backend` and `mrunknownde/utools-frontend` with `:latest` and `:<short-sha>` tags. Requires LFS checkout for MaxMind databases.
-- **`maxmind-update.yml`**: Runs on the 1st of each month. Downloads updated GeoLite2 databases via `geoipupdate` and commits them back to Git LFS.
+- **`docker-build-push.yml`**: Triggered on push to `main`. Builds multi-arch images (`linux/amd64`, `linux/arm64`) and pushes to Docker Hub as `mrunknownde/utools-backend` and `mrunknownde/utools-frontend` with `:latest` and `:<short-sha>` tags.

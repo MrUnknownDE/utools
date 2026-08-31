@@ -1,89 +1,98 @@
-import { API, setupCopyBtn, detectDualStack } from '../shared.js';
+import { API, setupCopyBtn, detectDualStack, renderLed } from '../shared.js';
+
+function sectionEyebrow(text) {
+  return `<h2 class="flex items-center gap-2 mb-3 font-label text-xs uppercase tracking-widest text-[var(--color-text-muted)]"><span class="inline-block w-1.5 h-4 rounded-full" style="background:var(--color-accent)"></span>${text}</h2>`;
+}
+
+function sectionTitle(text, targetId) {
+  return `<h2 class="text-xl font-display font-bold text-[var(--color-accent-strong)] pb-2 mb-4 flex items-center gap-2" style="border-bottom:1px solid color-mix(in oklab, var(--color-accent) 30%, var(--color-border))">
+    <span class="inline-block w-1.5 h-5 rounded-full shrink-0" style="background:var(--color-accent)"></span>
+    <span>${text}${targetId ? ` — <span id="${targetId}" class="font-mono text-[var(--color-text)] text-base font-normal ml-1"></span>` : ''}</span>
+  </h2>`;
+}
 
 export const page = {
   title: 'IP Info & Tools',
 
   template: () => `
-<div class="container mx-auto max-w-5xl glass-panel rounded-xl shadow-2xl p-6 md:p-8 backdrop-blur-xl border border-gray-800/50">
-  <h1 class="text-3xl font-bold mb-8 text-center text-gradient glitch-text">Your Digital Footprint</h1>
+<div class="container mx-auto max-w-5xl panel p-6 md:p-8">
+  <div class="section-header mx-auto max-w-2xl text-center !border-0 !pl-0 mb-8">
+    <span class="eyebrow">Own connection</span>
+    <h1 class="title text-3xl">Your Digital Footprint</h1>
+  </div>
 
   <!-- Own IP info -->
   <div id="info-section" class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
     <!-- Left column -->
     <div class="space-y-6 fade-in" style="animation-delay:.1s">
-      <div class="glass-card rounded-lg p-5 relative overflow-hidden group">
-        <div class="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
-          </svg>
-        </div>
-        <h2 class="text-xs font-bold text-purple-400 uppercase tracking-widest mb-2">Your Public IP</h2>
+      <div class="card p-5 relative overflow-hidden">
+        ${sectionEyebrow('Your Public IP')}
         <div id="ip-info" class="min-h-[40px] flex items-center gap-2">
           <div id="ip-loader" class="loader"></div>
-          <a id="ip-address-link" href="#" class="text-3xl font-mono font-bold text-white tracking-tight break-all hidden hover:text-purple-300 transition-colors" title="Click for WHOIS Lookup">
+          <a id="ip-address-link" href="#" class="text-3xl font-mono font-bold text-[var(--color-text)] tracking-tight break-all hidden hover:text-[var(--color-link)] transition-colors" title="Click for WHOIS Lookup">
             <span id="ip-address"></span>
           </a>
           <button id="copy-ip-btn" class="copy-btn hidden">copy</button>
         </div>
         <!-- IPv6 row — shown only when dual-stack is detected -->
         <div id="ipv6-row" class="hidden mt-2 flex items-center gap-2">
-          <span class="text-xs font-bold text-blue-400/60 uppercase tracking-wider w-10 shrink-0">IPv6</span>
-          <span id="ipv6-address" class="font-mono text-blue-300 text-sm break-all"></span>
+          <span class="text-xs font-bold text-[var(--color-link)] opacity-60 uppercase tracking-wider w-10 shrink-0">IPv6</span>
+          <span id="ipv6-address" class="font-mono text-[var(--color-link)] text-sm break-all"></span>
           <button id="copy-ipv6-btn" class="copy-btn hidden">copy</button>
         </div>
         <!-- Privacy / risk flags — dual-stack: always show both rows -->
         <div id="privacy-checks" class="mt-3 space-y-1.5">
           <div class="flex items-center gap-2 min-h-[22px]">
-            <span class="text-xs font-bold text-gray-500 uppercase tracking-wider w-10 shrink-0">IPv4</span>
-            <div id="privacy-flags-v4" class="flex flex-wrap gap-1.5 items-center">
+            <span class="text-xs font-bold text-[var(--color-text-dim)] uppercase tracking-wider w-10 shrink-0">IPv4</span>
+            <div id="privacy-flags-v4" class="flex flex-wrap gap-3 items-center">
               <div id="privacy-loader-v4" class="loader" style="width:12px;height:12px;border-width:2px"></div>
             </div>
           </div>
           <div class="flex items-center gap-2 min-h-[22px]">
-            <span class="text-xs font-bold text-blue-400/60 uppercase tracking-wider w-10 shrink-0">IPv6</span>
-            <div id="privacy-flags-v6" class="flex flex-wrap gap-1.5 items-center">
-              <span class="text-xs text-gray-600 italic">detecting…</span>
+            <span class="text-xs font-bold text-[var(--color-link)] opacity-60 uppercase tracking-wider w-10 shrink-0">IPv6</span>
+            <div id="privacy-flags-v6" class="flex flex-wrap gap-3 items-center">
+              <span class="text-xs text-[var(--color-text-dim)] italic">detecting…</span>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="glass-card rounded-lg p-5 space-y-4">
+      <div class="card p-5 space-y-4">
         <div>
-          <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-700 pb-1">Location Details</h2>
-          <div id="geo-info" class="min-h-[80px] space-y-1 text-sm text-gray-300">
+          <h2 class="text-xs font-label font-bold text-[var(--color-text-muted)] uppercase tracking-widest mb-2 pb-1" style="border-bottom:1px solid var(--color-border)">Location Details</h2>
+          <div id="geo-info" class="min-h-[80px] space-y-1 text-sm text-[var(--color-text-muted)]">
             <div id="geo-loader" class="loader"></div>
             <div class="hidden grid grid-cols-2 gap-x-2 gap-y-1">
-              <p><span class="text-gray-500">Country:</span> <span id="country" class="text-gray-200 font-medium">-</span></p>
-              <p><span class="text-gray-500">Region:</span> <span id="region" class="text-gray-200 font-medium">-</span></p>
-              <p><span class="text-gray-500">City:</span> <span id="city" class="text-gray-200 font-medium">-</span></p>
-              <p><span class="text-gray-500">Zip:</span> <span id="postal" class="text-gray-200 font-medium">-</span></p>
-              <p class="col-span-2"><span class="text-gray-500">Coords:</span> <span id="coords" class="font-mono text-xs text-purple-300">-</span></p>
-              <p class="col-span-2"><span class="text-gray-500">Time:</span> <span id="timezone" class="text-gray-200 font-medium">-</span></p>
-              <p id="geo-error" class="text-red-400 col-span-2 text-xs"></p>
+              <p><span class="text-[var(--color-text-dim)]">Country:</span> <span id="country" class="text-[var(--color-text)] font-medium">-</span></p>
+              <p><span class="text-[var(--color-text-dim)]">Region:</span> <span id="region" class="text-[var(--color-text)] font-medium">-</span></p>
+              <p><span class="text-[var(--color-text-dim)]">City:</span> <span id="city" class="text-[var(--color-text)] font-medium">-</span></p>
+              <p><span class="text-[var(--color-text-dim)]">Zip:</span> <span id="postal" class="text-[var(--color-text)] font-medium">-</span></p>
+              <p class="col-span-2"><span class="text-[var(--color-text-dim)]">Coords:</span> <span id="coords" class="font-mono text-xs text-[var(--color-accent)]">-</span></p>
+              <p class="col-span-2"><span class="text-[var(--color-text-dim)]">Time:</span> <span id="timezone" class="text-[var(--color-text)] font-medium">-</span></p>
+              <p id="geo-error" class="text-[var(--color-status-bad)] col-span-2 text-xs"></p>
             </div>
           </div>
         </div>
         <div>
-          <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-700 pb-1">Network (ASN)</h2>
-          <div id="asn-info" class="min-h-[40px] space-y-1 text-sm text-gray-300">
+          <h2 class="text-xs font-label font-bold text-[var(--color-text-muted)] uppercase tracking-widest mb-2 pb-1" style="border-bottom:1px solid var(--color-border)">Network (ASN)</h2>
+          <div id="asn-info" class="min-h-[40px] space-y-1 text-sm text-[var(--color-text-muted)]">
             <div id="asn-loader" class="loader"></div>
             <div class="hidden">
-              <p><span class="text-gray-500">AS Number:</span> <span id="asn-number" class="font-mono text-purple-300">-</span></p>
-              <p><span class="text-gray-500">Org:</span> <span id="asn-org" class="font-medium text-white">-</span></p>
-              <p id="asn-error" class="text-red-400 text-xs"></p>
+              <p><span class="text-[var(--color-text-dim)]">AS Number:</span> <span id="asn-number" class="font-mono text-[var(--color-accent)]">-</span></p>
+              <p><span class="text-[var(--color-text-dim)]">Org:</span> <span id="asn-org" class="font-medium text-[var(--color-text)]">-</span></p>
+              <p id="asn-error" class="text-[var(--color-status-bad)] text-xs"></p>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="glass-card rounded-lg p-5">
-        <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-700 pb-1">Hostname (rDNS)</h2>
-        <div id="rdns-info" class="min-h-[30px] text-sm text-gray-300">
+      <div class="card p-5">
+        <h2 class="text-xs font-label font-bold text-[var(--color-text-muted)] uppercase tracking-widest mb-2 pb-1" style="border-bottom:1px solid var(--color-border)">Hostname (rDNS)</h2>
+        <div id="rdns-info" class="min-h-[30px] text-sm text-[var(--color-text-muted)]">
           <div id="rdns-loader" class="loader"></div>
           <div class="hidden">
-            <ul id="rdns-list" class="list-none space-y-1 font-mono text-xs text-green-400"><li>-</li></ul>
-            <p id="rdns-error" class="text-red-400 text-xs"></p>
+            <ul id="rdns-list" class="list-none space-y-1 font-mono text-xs text-[var(--color-status-good)]"><li>-</li></ul>
+            <p id="rdns-error" class="text-[var(--color-status-bad)] text-xs"></p>
           </div>
         </div>
       </div>
@@ -91,150 +100,138 @@ export const page = {
 
     <!-- Right column: map — container is h-[420px] so the Leaflet map can fill it -->
     <div class="fade-in" style="animation-delay:.2s">
-      <h2 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
-          <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
-        </svg>
-        Location
-      </h2>
-      <div id="map-container" class="rounded-xl h-[420px] relative border border-gray-700/50 overflow-hidden bg-gray-900/60 shadow-inner">
+      ${sectionEyebrow('Location')}
+      <div id="map-container" class="rounded-xl h-[420px] relative overflow-hidden shadow-inner" style="border:1px solid var(--color-border); background:var(--color-panel-inset)">
         <div id="map-loader" class="loader absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"></div>
         <div id="map" class="w-full hidden z-0 transition-opacity duration-700 rounded-xl"></div>
-        <p id="map-message" class="text-gray-400 hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-sm">Could not load map.</p>
+        <p id="map-message" class="text-[var(--color-text-muted)] hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-sm">Could not load map.</p>
         <div class="absolute inset-0 pointer-events-none rounded-xl ring-1 ring-inset ring-white/10"></div>
       </div>
     </div>
   </div>
 
   <!-- Browser Fingerprint -->
-  <div class="mt-6 glass-card rounded-xl p-5 fade-in" style="animation-delay:.3s">
-    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-700 pb-2 flex items-center gap-2">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-      </svg>
+  <div class="mt-6 card p-5 fade-in" style="animation-delay:.3s">
+    <h2 class="text-xs font-label font-bold text-[var(--color-text-muted)] uppercase tracking-widest mb-4 pb-2 flex items-center gap-2" style="border-bottom:1px solid var(--color-border)">
+      <span class="inline-block w-1.5 h-4 rounded-full" style="background:var(--color-accent)"></span>
       Browser Fingerprint
     </h2>
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-8 gap-y-4 text-sm">
       <div>
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Browser</p>
-        <p id="fp-browser" class="text-gray-200 font-medium font-mono">-</p>
+        <p class="text-xs text-[var(--color-text-dim)] uppercase tracking-wider mb-0.5">Browser</p>
+        <p id="fp-browser" class="text-[var(--color-text)] font-medium font-mono">-</p>
       </div>
       <div>
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Operating System</p>
-        <p id="fp-os" class="text-gray-200 font-medium">-</p>
+        <p class="text-xs text-[var(--color-text-dim)] uppercase tracking-wider mb-0.5">Operating System</p>
+        <p id="fp-os" class="text-[var(--color-text)] font-medium">-</p>
       </div>
       <div>
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Screen</p>
-        <p id="fp-screen" class="text-gray-200 font-medium font-mono">-</p>
+        <p class="text-xs text-[var(--color-text-dim)] uppercase tracking-wider mb-0.5">Screen</p>
+        <p id="fp-screen" class="text-[var(--color-text)] font-medium font-mono">-</p>
       </div>
       <div>
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Viewport</p>
-        <p id="fp-viewport" class="text-gray-200 font-medium font-mono">-</p>
+        <p class="text-xs text-[var(--color-text-dim)] uppercase tracking-wider mb-0.5">Viewport</p>
+        <p id="fp-viewport" class="text-[var(--color-text)] font-medium font-mono">-</p>
       </div>
       <div>
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Language</p>
-        <p id="fp-language" class="text-gray-200 font-medium">-</p>
+        <p class="text-xs text-[var(--color-text-dim)] uppercase tracking-wider mb-0.5">Language</p>
+        <p id="fp-language" class="text-[var(--color-text)] font-medium">-</p>
       </div>
       <div>
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Timezone</p>
-        <p id="fp-timezone" class="text-gray-200 font-medium">-</p>
+        <p class="text-xs text-[var(--color-text-dim)] uppercase tracking-wider mb-0.5">Timezone</p>
+        <p id="fp-timezone" class="text-[var(--color-text)] font-medium">-</p>
       </div>
       <div>
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Color Depth</p>
-        <p id="fp-color" class="text-gray-200 font-medium">-</p>
+        <p class="text-xs text-[var(--color-text-dim)] uppercase tracking-wider mb-0.5">Color Depth</p>
+        <p id="fp-color" class="text-[var(--color-text)] font-medium">-</p>
       </div>
       <div>
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Privacy</p>
-        <p id="fp-privacy" class="text-gray-200 font-medium text-xs leading-relaxed">-</p>
+        <p class="text-xs text-[var(--color-text-dim)] uppercase tracking-wider mb-0.5">Privacy</p>
+        <p id="fp-privacy" class="text-[var(--color-text)] font-medium text-xs leading-relaxed">-</p>
       </div>
     </div>
-    <details class="mt-4 border-t border-gray-700/50 pt-3">
-      <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-300 select-none list-none transition-colors">User Agent string</summary>
-      <p id="fp-ua" class="font-mono text-xs text-gray-400 break-all mt-2 leading-relaxed"></p>
+    <details class="mt-4 pt-3" style="border-top:1px solid var(--color-border)">
+      <summary class="text-xs text-[var(--color-text-dim)] cursor-pointer hover:text-[var(--color-text-muted)] select-none list-none transition-colors">User Agent string</summary>
+      <p id="fp-ua" class="font-mono text-xs text-[var(--color-text-muted)] break-all mt-2 leading-relaxed"></p>
     </details>
   </div>
 
   <!-- IP Lookup -->
-  <div class="mt-8 p-6 glass-card rounded-xl">
-    <h2 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-500 mb-4 flex items-center gap-2">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+  <div class="mt-8 p-6 card">
+    <h2 class="text-xl font-display font-bold text-gradient mb-4 flex items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-[var(--color-link)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
       </svg>
       IP Address / Domain Lookup
     </h2>
     <div class="flex flex-col sm:flex-row gap-3 mb-6">
-      <input type="text" id="lookup-ip-input" placeholder="Enter IP or Domain (e.g., 8.8.8.8 or google.com)"
-        class="flex-grow px-4 py-3 bg-gray-900/50 border border-gray-700/50 rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono transition-all placeholder-gray-600">
-      <button id="lookup-button" disabled
-        class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:shadow-purple-500/25 transition-all duration-200">
+      <input type="text" id="lookup-ip-input" placeholder="Enter IP or Domain (e.g., 8.8.8.8 or google.com)" class="input flex-grow">
+      <button id="lookup-button" disabled class="btn btn-primary">
         Lookup
       </button>
     </div>
-    <div id="lookup-error" class="text-red-400 mb-4 hidden p-3 bg-red-900/20 border border-red-500/30 rounded text-sm"></div>
+    <div id="lookup-error" class="mb-4 hidden alert alert-bad"></div>
 
-    <div id="lookup-results-section" class="hidden grid grid-cols-1 md:grid-cols-2 gap-8 mt-6 border-t border-gray-700/50 pt-6 fade-in">
+    <div id="lookup-results-section" class="hidden grid grid-cols-1 md:grid-cols-2 gap-8 mt-6 pt-6 fade-in" style="border-top:1px solid var(--color-border)">
       <!-- Left: info -->
       <div class="space-y-5">
-        <h3 class="text-lg font-semibold text-gray-200">Result for: <span id="lookup-ip-address" class="font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded"></span>
+        <h3 class="text-lg font-semibold text-[var(--color-text)]">Result for: <span id="lookup-ip-address" class="font-mono text-[var(--color-accent)]" style="background:color-mix(in oklab, var(--color-accent) 12%, transparent); padding:.125rem .5rem; border-radius:.375rem"></span>
           <button id="copy-lookup-ip-btn" class="copy-btn ml-2">copy</button>
         </h3>
         <div id="lookup-result-loader" class="loader hidden"></div>
 
-        <div id="lookup-geo-info" class="text-sm text-gray-300">
-          <h4 class="font-bold text-gray-500 uppercase text-xs tracking-wider mb-2">Geolocation</h4>
+        <div id="lookup-geo-info" class="text-sm text-[var(--color-text-muted)]">
+          <h4 class="font-label font-bold text-[var(--color-text-dim)] uppercase text-xs tracking-wider mb-2">Geolocation</h4>
           <div class="grid grid-cols-2 gap-x-2 gap-y-1">
-            <p><span class="text-gray-500">Country:</span> <span id="lookup-country" class="text-white">-</span></p>
-            <p><span class="text-gray-500">Region:</span> <span id="lookup-region" class="text-white">-</span></p>
-            <p><span class="text-gray-500">City:</span> <span id="lookup-city" class="text-white">-</span></p>
-            <p><span class="text-gray-500">Zip:</span> <span id="lookup-postal" class="text-white">-</span></p>
-            <p class="col-span-2"><span class="text-gray-500">Coords:</span> <span id="lookup-coords" class="font-mono text-purple-300">-</span></p>
-            <p class="col-span-2"><span class="text-gray-500">Time:</span> <span id="lookup-timezone" class="text-white">-</span></p>
-            <p id="lookup-geo-error" class="text-red-400 col-span-2 text-xs"></p>
+            <p><span class="text-[var(--color-text-dim)]">Country:</span> <span id="lookup-country" class="text-[var(--color-text)]">-</span></p>
+            <p><span class="text-[var(--color-text-dim)]">Region:</span> <span id="lookup-region" class="text-[var(--color-text)]">-</span></p>
+            <p><span class="text-[var(--color-text-dim)]">City:</span> <span id="lookup-city" class="text-[var(--color-text)]">-</span></p>
+            <p><span class="text-[var(--color-text-dim)]">Zip:</span> <span id="lookup-postal" class="text-[var(--color-text)]">-</span></p>
+            <p class="col-span-2"><span class="text-[var(--color-text-dim)]">Coords:</span> <span id="lookup-coords" class="font-mono text-[var(--color-accent)]">-</span></p>
+            <p class="col-span-2"><span class="text-[var(--color-text-dim)]">Time:</span> <span id="lookup-timezone" class="text-[var(--color-text)]">-</span></p>
+            <p id="lookup-geo-error" class="text-[var(--color-status-bad)] col-span-2 text-xs"></p>
           </div>
         </div>
 
-        <div id="lookup-asn-info" class="text-sm text-gray-300">
-          <h4 class="font-bold text-gray-500 uppercase text-xs tracking-wider mb-2">ASN</h4>
-          <p><span class="text-gray-500">Number:</span> <span id="lookup-asn-number" class="text-white font-mono">-</span></p>
-          <p><span class="text-gray-500">Org:</span> <span id="lookup-asn-org" class="text-white">-</span></p>
-          <p id="lookup-asn-error" class="text-red-400 text-xs"></p>
+        <div id="lookup-asn-info" class="text-sm text-[var(--color-text-muted)]">
+          <h4 class="font-label font-bold text-[var(--color-text-dim)] uppercase text-xs tracking-wider mb-2">ASN</h4>
+          <p><span class="text-[var(--color-text-dim)]">Number:</span> <span id="lookup-asn-number" class="text-[var(--color-text)] font-mono">-</span></p>
+          <p><span class="text-[var(--color-text-dim)]">Org:</span> <span id="lookup-asn-org" class="text-[var(--color-text)]">-</span></p>
+          <p id="lookup-asn-error" class="text-[var(--color-status-bad)] text-xs"></p>
         </div>
 
-        <div id="lookup-rdns-info" class="text-sm text-gray-300">
-          <h4 class="font-bold text-gray-500 uppercase text-xs tracking-wider mb-2">Reverse DNS</h4>
-          <ul id="lookup-rdns-list" class="list-none space-y-1 font-mono text-xs text-green-400"><li>-</li></ul>
-          <p id="lookup-rdns-error" class="text-red-400 text-xs"></p>
+        <div id="lookup-rdns-info" class="text-sm text-[var(--color-text-muted)]">
+          <h4 class="font-label font-bold text-[var(--color-text-dim)] uppercase text-xs tracking-wider mb-2">Reverse DNS</h4>
+          <ul id="lookup-rdns-list" class="list-none space-y-1 font-mono text-xs text-[var(--color-status-good)]"><li>-</li></ul>
+          <p id="lookup-rdns-error" class="text-[var(--color-status-bad)] text-xs"></p>
         </div>
       </div>
 
       <!-- Right: map + action buttons -->
       <div class="space-y-4">
-        <h4 class="font-bold text-gray-500 uppercase text-xs tracking-wider">Location Map</h4>
-        <div id="lookup-map-container" class="rounded-xl h-[260px] relative overflow-hidden bg-gray-900/60 border border-gray-700/50">
+        <h4 class="font-label font-bold text-[var(--color-text-dim)] uppercase text-xs tracking-wider">Location Map</h4>
+        <div id="lookup-map-container" class="rounded-xl h-[260px] relative overflow-hidden" style="background:var(--color-panel-inset); border:1px solid var(--color-border)">
           <div id="lookup-map-loader" class="loader hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"></div>
           <div id="lookup-map" class="w-full hidden rounded-xl"></div>
-          <p id="lookup-map-message" class="text-gray-400 hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-center px-4">Could not load map.</p>
+          <p id="lookup-map-message" class="text-[var(--color-text-muted)] hidden absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-center px-4">Could not load map.</p>
           <div class="absolute inset-0 pointer-events-none ring-1 ring-inset ring-white/10 rounded-xl"></div>
         </div>
 
         <!-- Action buttons -->
         <div class="grid grid-cols-3 gap-2">
-          <button id="lookup-ping-button" disabled title="Send ICMP ping"
-            class="action-tool-btn flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-gray-700/50 bg-gray-800/50 hover:bg-purple-900/30 hover:border-purple-500/40 text-gray-400 hover:text-white">
+          <button id="lookup-ping-button" disabled title="Send ICMP ping" class="btn-tool">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/>
             </svg>
             <span class="text-xs font-semibold">Ping</span>
           </button>
-          <button id="lookup-trace-button" disabled title="Run traceroute"
-            class="action-tool-btn flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-gray-700/50 bg-gray-800/50 hover:bg-purple-900/30 hover:border-purple-500/40 text-gray-400 hover:text-white">
+          <button id="lookup-trace-button" disabled title="Run traceroute" class="btn-tool">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
             </svg>
             <span class="text-xs font-semibold">Traceroute</span>
           </button>
-          <button id="lookup-scan-button" disabled title="Scan common ports"
-            class="action-tool-btn flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed border border-gray-700/50 bg-gray-800/50 hover:bg-purple-900/30 hover:border-purple-500/40 text-gray-400 hover:text-white">
+          <button id="lookup-scan-button" disabled title="Scan common ports" class="btn-tool">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
             </svg>
@@ -246,93 +243,78 @@ export const page = {
   </div>
 
   <!-- Ping Results — dedicated section, consistent with traceroute/port-scan -->
-  <div id="ping-section" class="mt-8 p-6 glass-card rounded-xl hidden fade-in">
-    <h2 class="text-xl font-bold text-purple-300 border-b border-purple-500/30 pb-2 mb-4 flex items-center gap-2">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-      </svg>
-      Ping &mdash; <span id="ping-target" class="font-mono text-white text-base font-normal ml-1"></span>
-    </h2>
+  <div id="ping-section" class="mt-8 p-6 card hidden fade-in">
+    ${sectionTitle('Ping', 'ping-target')}
     <div class="flex items-center gap-3 mb-4 text-sm">
       <div id="ping-section-loader" class="loader hidden"></div>
-      <span id="ping-section-message" class="text-gray-400"></span>
-      <span id="ping-section-error" class="text-red-400"></span>
+      <span id="ping-section-message" class="text-[var(--color-text-muted)]"></span>
+      <span id="ping-section-error" class="text-[var(--color-status-bad)]"></span>
     </div>
     <!-- Stat cards -->
     <div id="ping-stats-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 hidden">
-      <div class="bg-gray-900/50 rounded-lg p-4 text-center border border-gray-700/30">
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Sent</p>
-        <p id="ping-stat-sent" class="text-3xl font-bold font-mono text-white">-</p>
+      <div class="stat-box">
+        <p class="stat-label uppercase tracking-wider">Sent</p>
+        <p id="ping-stat-sent" class="stat-value font-mono text-2xl">-</p>
       </div>
-      <div class="bg-gray-900/50 rounded-lg p-4 text-center border border-gray-700/30">
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Received</p>
-        <p id="ping-stat-recv" class="text-3xl font-bold font-mono text-green-400">-</p>
+      <div class="stat-box stat-good">
+        <p class="stat-label uppercase tracking-wider">Received</p>
+        <p id="ping-stat-recv" class="stat-value font-mono text-2xl">-</p>
       </div>
-      <div class="bg-gray-900/50 rounded-lg p-4 text-center border border-gray-700/30">
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Packet Loss</p>
-        <p id="ping-stat-loss" class="text-3xl font-bold font-mono text-red-400">-</p>
+      <div class="stat-box">
+        <p class="stat-label uppercase tracking-wider">Packet Loss</p>
+        <p id="ping-stat-loss" class="stat-value font-mono text-2xl">-</p>
       </div>
-      <div class="bg-gray-900/50 rounded-lg p-4 text-center border border-gray-700/30">
-        <p class="text-xs text-gray-500 uppercase tracking-wider mb-1">Avg RTT</p>
-        <p id="ping-stat-rtt" class="text-3xl font-bold font-mono text-blue-300">-</p>
+      <div class="stat-box stat-link">
+        <p class="stat-label uppercase tracking-wider">Avg RTT</p>
+        <p id="ping-stat-rtt" class="stat-value font-mono text-2xl">-</p>
       </div>
     </div>
     <!-- RTT range bar -->
-    <div id="ping-rtt-range" class="hidden mb-4 px-4 py-3 bg-gray-900/40 rounded-lg border border-gray-700/30 flex flex-wrap gap-6 text-xs font-mono text-gray-500">
-      <span>min &nbsp;<span id="ping-rtt-min" class="text-gray-200 font-semibold">-</span> ms</span>
-      <span>avg &nbsp;<span id="ping-rtt-avg" class="text-gray-200 font-semibold">-</span> ms</span>
-      <span>max &nbsp;<span id="ping-rtt-max" class="text-gray-200 font-semibold">-</span> ms</span>
+    <div id="ping-rtt-range" class="hidden mb-4 px-4 py-3 rounded-lg flex flex-wrap gap-6 text-xs font-mono text-[var(--color-text-dim)]" style="background:var(--color-panel-inset); border:1px solid var(--color-border)">
+      <span>min &nbsp;<span id="ping-rtt-min" class="text-[var(--color-text)] font-semibold">-</span> ms</span>
+      <span>avg &nbsp;<span id="ping-rtt-avg" class="text-[var(--color-text)] font-semibold">-</span> ms</span>
+      <span>max &nbsp;<span id="ping-rtt-max" class="text-[var(--color-text)] font-semibold">-</span> ms</span>
     </div>
     <!-- Raw output -->
     <details>
-      <summary class="text-xs text-gray-500 hover:text-gray-300 cursor-pointer select-none list-none transition-colors">Raw output</summary>
+      <summary class="text-xs text-[var(--color-text-dim)] hover:text-[var(--color-text-muted)] cursor-pointer select-none list-none transition-colors">Raw output</summary>
       <pre id="ping-raw-output" class="result-pre mt-2 text-xs"></pre>
     </details>
   </div>
 
   <!-- Traceroute -->
-  <div id="traceroute-section" class="mt-8 p-6 glass-card rounded-xl hidden fade-in">
-    <h2 class="text-xl font-bold text-purple-300 border-b border-purple-500/30 pb-2 mb-4 flex items-center gap-2">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-      </svg>
-      Traceroute &mdash; <span id="traceroute-target" class="font-mono text-white text-base font-normal ml-1"></span>
-    </h2>
+  <div id="traceroute-section" class="mt-8 p-6 card hidden fade-in">
+    ${sectionTitle('Traceroute', 'traceroute-target')}
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-3 text-sm">
         <div id="traceroute-loader" class="loader hidden"></div>
-        <span id="traceroute-message" class="text-gray-400"></span>
+        <span id="traceroute-message" class="text-[var(--color-text-muted)]"></span>
       </div>
       <button id="traceroute-stop-btn" class="stop-btn hidden">&#9632; Stop</button>
     </div>
     <!-- Hop table header -->
-    <div class="hidden sm:grid traceroute-header text-xs text-gray-600 uppercase tracking-wider px-2 mb-1" style="grid-template-columns:2rem 1fr auto">
+    <div class="hidden sm:grid traceroute-header text-xs text-[var(--color-text-dim)] uppercase tracking-wider px-2 mb-1" style="grid-template-columns:2rem 1fr auto">
       <span class="text-right pr-3">#</span>
       <span>IP / Hostname</span>
       <span class="text-right">RTT</span>
     </div>
-    <div id="traceroute-output" class="font-mono text-sm rounded-lg border border-gray-700/30 bg-black/20 overflow-y-auto max-h-[420px] p-2 space-y-0.5"></div>
+    <div id="traceroute-output" class="font-mono text-sm rounded-lg overflow-y-auto max-h-[420px] p-2 space-y-0.5" style="border:1px solid var(--color-border); background:var(--color-panel-inset)"></div>
   </div>
 
   <!-- Port Scan -->
-  <div id="port-scan-section" class="mt-8 p-6 glass-card rounded-xl hidden fade-in">
-    <h2 class="text-xl font-bold text-purple-300 border-b border-purple-500/30 pb-2 mb-4 flex items-center gap-2">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
-      </svg>
-      Port Scan Results
-    </h2>
+  <div id="port-scan-section" class="mt-8 p-6 card hidden fade-in">
+    ${sectionTitle('Port Scan Results')}
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center gap-3 text-sm">
         <div id="port-scan-loader" class="loader hidden"></div>
-        <span id="port-scan-message" class="text-gray-300"></span>
+        <span id="port-scan-message" class="text-[var(--color-text-muted)]"></span>
       </div>
       <button id="port-scan-stop-btn" class="stop-btn hidden">&#9632; Stop</button>
     </div>
-    <div id="port-scan-output" class="text-sm font-mono bg-gray-900/50 p-4 rounded-lg border border-gray-700/50 max-h-[300px] overflow-y-auto"></div>
+    <div id="port-scan-output" class="text-sm font-mono p-4 rounded-lg max-h-[300px] overflow-y-auto" style="background:var(--color-panel-inset); border:1px solid var(--color-border)"></div>
   </div>
 
-  <div id="global-error" class="mt-6 p-4 bg-red-900/50 border border-red-500/50 text-red-100 rounded-lg hidden backdrop-blur shadow-lg"></div>
+  <div id="global-error" class="mt-6 alert alert-bad hidden"></div>
 </div>`,
 
   async init(search) {
@@ -485,12 +467,10 @@ export const page = {
     lookupInput.addEventListener('input', syncLookupBtn);
 
     // ── Privacy / risk flags ──────────────────────────────────────
-    const FLAG_COLORS = {
-      green:  'bg-green-900/40 text-green-300 border border-green-700/50',
-      orange: 'bg-orange-900/40 text-orange-300 border border-orange-700/50',
-      yellow: 'bg-yellow-900/40 text-yellow-300 border border-yellow-700/50',
-      red:    'bg-red-900/40 text-red-300 border border-red-700/50',
-    };
+    // Maps the backend's 4-tier severity to the app's 3-tier LED system —
+    // an intentional simplification, mirroring how real status LEDs only
+    // have good/warn/bad states.
+    const FLAG_LED_STATUS = { green: 'good', yellow: 'warn', orange: 'warn', red: 'bad' };
 
     async function fetchPrivacyFlags(ip, version = 4) {
       const container = document.getElementById(`privacy-flags-v${version}`);
@@ -501,15 +481,15 @@ export const page = {
         const data = await r.json();
         loader?.remove();
         if (!data.flags?.length) {
-          container.innerHTML = '<span class="text-xs text-gray-600">—</span>';
+          container.innerHTML = '<span class="text-xs text-[var(--color-text-dim)]">—</span>';
           return;
         }
         container.innerHTML = data.flags.map(f =>
-          `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${FLAG_COLORS[f.color] || FLAG_COLORS.green}">${f.label}</span>`
+          renderLed(FLAG_LED_STATUS[f.color] || 'neutral', f.label)
         ).join('');
       } catch {
         loader?.remove();
-        container.innerHTML = '<span class="text-xs text-gray-600">N/A</span>';
+        container.innerHTML = '<span class="text-xs text-[var(--color-text-dim)]">N/A</span>';
       }
     }
 
@@ -570,7 +550,7 @@ export const page = {
 
       function setPrivacyNA(version) {
         const el = document.getElementById(`privacy-flags-v${version}`);
-        if (el) { document.getElementById(`privacy-loader-v${version}`)?.remove(); el.innerHTML = '<span class="text-xs text-gray-600">N/A</span>'; }
+        if (el) { document.getElementById(`privacy-loader-v${version}`)?.remove(); el.innerHTML = '<span class="text-xs text-[var(--color-text-dim)]">N/A</span>'; }
       }
 
       const { ipv4, ipv6 } = await detectDualStack();
@@ -649,7 +629,7 @@ export const page = {
         const asnContainer = document.getElementById('asn-number')?.closest('div:not(.loader)');
         if (asnContainer) asnContainer.classList.remove('hidden');
         document.getElementById('asn-number').innerHTML =
-          `<a href="/asn?asn=${asnNum}" class="hover:text-purple-200 underline decoration-dotted transition-colors" title="Open ASN Lookup">AS${asnNum}</a>`;
+          `<a href="/asn?asn=${asnNum}" class="hover:text-[var(--color-accent-strong)] underline decoration-dotted transition-colors" title="Open ASN Lookup">AS${asnNum}</a>`;
       } else {
         updateField(document.getElementById('asn-number'), null, null, document.getElementById('asn-error'), data.asn?.error || '-');
       }
@@ -730,7 +710,7 @@ export const page = {
 
         if (data.asn?.number) {
           document.getElementById('lookup-asn-number').innerHTML =
-            `<a href="/asn?asn=${data.asn.number}" class="text-purple-400 hover:text-purple-300 underline decoration-dotted transition-colors font-mono">AS${data.asn.number}</a>`;
+            `<a href="/asn?asn=${data.asn.number}" class="text-[var(--color-accent)] hover:text-[var(--color-accent-strong)] underline decoration-dotted transition-colors font-mono">AS${data.asn.number}</a>`;
         } else {
           updateField(document.getElementById('lookup-asn-number'), data.asn?.number, null, document.getElementById('lookup-asn-error'));
         }
@@ -774,8 +754,8 @@ export const page = {
           document.getElementById('ping-stat-sent').textContent = data.stats.packets.transmitted;
           document.getElementById('ping-stat-recv').textContent = data.stats.packets.received;
           document.getElementById('ping-stat-loss').textContent = `${loss}%`;
-          document.getElementById('ping-stat-loss').className =
-            `text-3xl font-bold font-mono ${loss === 0 || loss === '0' ? 'text-green-400' : loss >= 50 ? 'text-red-400' : 'text-yellow-400'}`;
+          document.getElementById('ping-stat-loss').style.color =
+            (loss === 0 || loss === '0') ? 'var(--color-status-good)' : loss >= 50 ? 'var(--color-status-bad)' : 'var(--color-status-warn)';
           document.getElementById('ping-stat-rtt').textContent = data.stats.rtt ? `${data.stats.rtt.avg} ms` : '-';
           pingStatsGrid.classList.remove('hidden');
         }
@@ -910,7 +890,8 @@ export const page = {
         body.appendChild(line);
       } else {
         const line = document.createElement('div');
-        line.classList.add('hop-ip-line', 'text-gray-400');
+        line.classList.add('hop-ip-line');
+        line.style.color = 'var(--color-text-muted)';
         line.textContent = hop.rawLine || 'Unknown hop';
         body.appendChild(line);
       }
@@ -966,13 +947,13 @@ export const page = {
       const div = document.createElement('div');
       div.classList.add('mb-1', 'fade-in');
       if (data.error) {
-        div.innerHTML = `<span class="text-red-400">Error: ${data.error}</span>`;
+        div.innerHTML = `<span style="color:var(--color-status-bad)">Error: ${data.error}</span>`;
       } else {
-        const colors = { open: 'text-green-400', closed: 'text-red-400', timeout: 'text-yellow-400' };
-        const labels = { open: 'OPEN', closed: 'CLOSED', timeout: 'TIMEOUT (Filtered?)' };
-        const col = colors[data.status] || 'text-gray-400';
-        const lbl = labels[data.status] || (data.status || '').toUpperCase();
-        div.innerHTML = `Port <span class="font-bold w-12 inline-block">${data.port}</span> <span class="w-24 inline-block">(${data.service})</span>: <span class="font-bold ${col}">${lbl}</span>`;
+        const statusMap = { open: 'good', closed: 'bad', timeout: 'warn' };
+        const labels     = { open: 'OPEN', closed: 'CLOSED', timeout: 'TIMEOUT (Filtered?)' };
+        const status = statusMap[data.status] || 'neutral';
+        const lbl    = labels[data.status] || (data.status || '').toUpperCase();
+        div.innerHTML = `<span class="inline-flex items-center gap-2 text-[var(--color-text-muted)]">Port <span class="font-bold text-[var(--color-text)] w-12 inline-block">${data.port}</span> <span class="w-24 inline-block">(${data.service})</span>: ${renderLed(status, lbl)}</span>`;
       }
       portScanOutput.appendChild(div);
       portScanOutput.scrollTop = portScanOutput.scrollHeight;

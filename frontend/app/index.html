@@ -4,18 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>uTools – Network Suite</title>
-  <link rel="icon" href="https://mrunk.de/pic/favicon/favicon.svg" type="image/svg+xml">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-  <link rel="stylesheet" href="shared.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="dist/fonts.css">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="dist/app.css">
 </head>
-<body class="bg-gray-950 text-gray-100 font-sans p-4 md:p-8 min-h-screen bg-[url('https://tailwindcss.com/_next/static/media/hero-dark.939eb757.png')] bg-cover bg-center bg-fixed selection:bg-purple-500 selection:text-white">
+<body class="bg-graticule font-body min-h-screen p-4 md:p-8 text-[var(--color-text)]">
 
-  <header class="glass-panel">
+  <header>
     <div class="header-top">
-      <h1 style="background:linear-gradient(to right,#c084fc,#e879f9);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent" class="text-2xl font-bold">
-        uTools <span style="-webkit-text-fill-color:#9ca3af" class="text-sm font-normal tracking-wider uppercase ml-2">Network Suite</span>
+      <h1 class="text-2xl font-display font-bold">
+        <span class="text-gradient">uTools</span>
+        <span class="font-label text-xs font-normal tracking-wider uppercase ml-2 text-[var(--color-text-dim)]">Network Suite</span>
       </h1>
       <button id="nav-toggle" class="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
         <span></span><span></span><span></span>
@@ -36,16 +36,15 @@
 
   <div id="app"></div>
 
-  <footer class="mt-8 pb-4 text-center text-xs text-gray-500">
-    <p>&copy; 2026 <a href="https://mrunk.de" class="text-purple-400 hover:text-purple-300 transition-colors">MrUnknownDE</a>
-      &nbsp;·&nbsp; Version: <span id="commit-sha" class="font-mono text-gray-400">loading…</span>
-      &nbsp;·&nbsp; GeoIP DB: <span id="geoip-date" class="font-mono text-gray-400">loading…</span></p>
+  <footer class="mt-8 pb-4 text-center text-xs font-label tracking-wide text-[var(--color-text-dim)]">
+    <p>&copy; 2026 <a href="https://mrunk.de" class="text-[var(--color-link)] hover:text-[var(--color-link-strong)] transition-colors">MrUnknownDE</a>
+      &nbsp;·&nbsp; Version: <span id="commit-sha" class="font-mono text-[var(--color-text-muted)]">loading…</span>
+      &nbsp;·&nbsp; GeoIP DB: <span id="geoip-date" class="font-mono text-[var(--color-text-muted)]">loading…</span></p>
   </footer>
 
-  <!-- Global libs loaded once for all pages -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <!-- Global libs loaded once for all pages — self-hosted, no CDN -->
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="vendor/d3.min.js"></script>
   <script type="module" src="router.js"></script>
 </body>
 </html>

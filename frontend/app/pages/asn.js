@@ -1,80 +1,79 @@
-import { API } from '../shared.js';
+import { API, renderLed } from '../shared.js';
 
 export const page = {
   title: 'ASN Lookup',
 
   template: () => `
-<div class="container mx-auto max-w-6xl glass-panel rounded-xl shadow-2xl p-6 md:p-8 backdrop-blur-xl border border-gray-800/50">
-  <h1 class="text-3xl font-bold mb-2 text-center text-gradient">AS / ASN Lookup</h1>
-  <p class="text-center text-gray-400 text-sm mb-8">Peering graph, prefixes &amp; IXP connections for any Autonomous System</p>
+<div class="container mx-auto max-w-6xl panel p-6 md:p-8">
+  <div class="section-header mx-auto max-w-2xl text-center !border-0 !pl-0">
+    <span class="eyebrow">Autonomous systems</span>
+    <h1 class="title text-3xl">AS / ASN Lookup</h1>
+  </div>
+  <p class="text-center text-[var(--color-text-muted)] text-sm mb-8">Peering graph, prefixes &amp; IXP connections for any Autonomous System</p>
 
   <div class="flex flex-col sm:flex-row gap-3 mb-6 max-w-2xl mx-auto">
-    <input type="text" id="asn-input" placeholder="Enter ASN (e.g. 15169 or AS3320)"
-      class="flex-grow px-4 py-3 bg-gray-900/50 border border-gray-700/50 rounded-lg text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent font-mono transition-all placeholder-gray-600">
-    <button id="lookup-button" disabled
-      class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-all duration-200">
-      Lookup
-    </button>
+    <input type="text" id="asn-input" placeholder="Enter ASN (e.g. 15169 or AS3320)" class="input flex-grow">
+    <button id="lookup-button" disabled class="btn btn-primary">Lookup</button>
   </div>
 
-  <div id="error-box" class="hidden max-w-2xl mx-auto mb-6 p-4 bg-red-900/30 border border-red-500/40 text-red-300 rounded-lg text-sm"></div>
+  <div id="error-box" class="hidden max-w-2xl mx-auto mb-6 alert alert-bad"></div>
 
   <div id="loading-section" class="hidden flex flex-col items-center gap-3 py-16">
     <div class="loader" style="width:40px;height:40px;border-width:5px;"></div>
-    <p class="text-gray-400 text-sm" id="loading-msg">Querying RIPE Stat &amp; PeeringDB…</p>
-    <p class="text-xs text-amber-400/80 bg-amber-400/10 border border-amber-400/20 rounded-lg px-4 py-2 max-w-sm text-center mt-1">
+    <p class="text-[var(--color-text-muted)] text-sm" id="loading-msg">Querying RIPE Stat &amp; PeeringDB…</p>
+    <p class="text-xs alert alert-warn max-w-sm text-center mt-1">
       ⏳ Large ASes (Cloudflare, Google, Tier-1 carriers) can take up to 15 s on first lookup — subsequent lookups are cached for 7 days.
     </p>
   </div>
 
   <div id="results-section" class="hidden fade-in">
-    <div class="glass-card rounded-xl p-6 mb-6">
+    <div class="card p-6 mb-6">
       <div class="flex flex-col md:flex-row md:items-center gap-4">
         <div class="flex-1">
           <div class="flex items-center gap-3 mb-1">
-            <span id="res-asn" class="font-mono text-2xl font-bold text-purple-400"></span>
-            <span id="res-announced-badge" class="hidden text-xs px-2 py-0.5 bg-green-500/20 border border-green-500/40 text-green-400 rounded-full">Announced</span>
-            <span id="res-type-badge" class="text-xs px-2 py-0.5 bg-blue-500/20 border border-blue-500/40 text-blue-300 rounded-full"></span>
+            <span id="res-asn" class="font-mono text-2xl font-bold text-[var(--color-accent)]"></span>
+            <span id="res-announced-badge" class="hidden"></span>
+            <span id="res-type-badge" class="tag"></span>
           </div>
-          <h2 id="res-name" class="text-xl font-semibold text-white mb-1"></h2>
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-400 mb-2">
-            <span id="res-policy-container" class="hidden">Peering Policy: <span id="res-policy" class="text-gray-200"></span></span>
-            <span id="res-website-container" class="hidden">Website: <a id="res-website" href="#" target="_blank" rel="noopener" class="text-purple-400 hover:text-purple-300 transition-colors"></a></span>
+          <h2 id="res-name" class="text-xl font-display font-semibold text-[var(--color-text)] mb-1"></h2>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[var(--color-text-muted)] mb-2">
+            <span id="res-policy-container" class="hidden">Peering Policy: <span id="res-policy" class="text-[var(--color-text)]"></span></span>
+            <span id="res-website-container" class="hidden">Website: <a id="res-website" href="#" target="_blank" rel="noopener" class="text-[var(--color-link)] hover:text-[var(--color-link-strong)] transition-colors"></a></span>
           </div>
-          <div id="res-rich-info" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-gray-700/50 hidden">
-            <div id="res-info-type-container" class="hidden"><div class="text-xs text-gray-500 uppercase tracking-widest">Type</div><div id="res-info-type" class="text-sm text-gray-200 capitalize mt-0.5"></div></div>
-            <div id="res-info-scope-container" class="hidden"><div class="text-xs text-gray-500 uppercase tracking-widest">Scope</div><div id="res-info-scope" class="text-sm text-gray-200 capitalize mt-0.5"></div></div>
-            <div id="res-info-traffic-container" class="hidden"><div class="text-xs text-gray-500 uppercase tracking-widest">Traffic</div><div id="res-info-traffic" class="text-sm text-gray-200 capitalize mt-0.5"></div></div>
-            <div id="res-info-ratio-container" class="hidden"><div class="text-xs text-gray-500 uppercase tracking-widest">Ratio</div><div id="res-info-ratio" class="text-sm text-gray-200 capitalize mt-0.5"></div></div>
+          <div id="res-rich-info" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 hidden" style="border-top:1px solid var(--color-border)">
+            <div id="res-info-type-container" class="hidden"><div class="text-xs font-label uppercase tracking-widest text-[var(--color-text-dim)]">Type</div><div id="res-info-type" class="text-sm text-[var(--color-text)] capitalize mt-0.5"></div></div>
+            <div id="res-info-scope-container" class="hidden"><div class="text-xs font-label uppercase tracking-widest text-[var(--color-text-dim)]">Scope</div><div id="res-info-scope" class="text-sm text-[var(--color-text)] capitalize mt-0.5"></div></div>
+            <div id="res-info-traffic-container" class="hidden"><div class="text-xs font-label uppercase tracking-widest text-[var(--color-text-dim)]">Traffic</div><div id="res-info-traffic" class="text-sm text-[var(--color-text)] capitalize mt-0.5"></div></div>
+            <div id="res-info-ratio-container" class="hidden"><div class="text-xs font-label uppercase tracking-widest text-[var(--color-text-dim)]">Ratio</div><div id="res-info-ratio" class="text-sm text-[var(--color-text)] capitalize mt-0.5"></div></div>
           </div>
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-center">
-          <div class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
-            <div id="res-upstream-count" class="text-xl font-bold text-blue-400">—</div>
-            <div class="text-xs text-gray-400 mt-0.5">Upstreams</div>
+          <div class="stat-box stat-link">
+            <div id="res-upstream-count" class="stat-value">—</div>
+            <div class="stat-label">Upstreams</div>
           </div>
-          <div class="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
-            <div id="res-downstream-count" class="text-xl font-bold text-green-400">—</div>
-            <div class="text-xs text-gray-400 mt-0.5">Downstreams</div>
+          <div class="stat-box stat-good">
+            <div id="res-downstream-count" class="stat-value">—</div>
+            <div class="stat-label">Downstreams</div>
           </div>
-          <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 col-span-2 sm:col-span-1">
-            <div id="res-prefix-count" class="text-xl font-bold text-purple-400">—</div>
-            <div class="text-xs text-gray-400 mt-0.5">Prefixes</div>
+          <div class="stat-box stat-accent col-span-2 sm:col-span-1">
+            <div id="res-prefix-count" class="stat-value">—</div>
+            <div class="stat-label">Prefixes</div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="glass-card rounded-xl p-6 mb-6">
-      <div class="flex items-center gap-3 mb-4">
-        <h3 class="text-lg font-bold text-purple-300">Network Map</h3>
-        <div class="flex gap-3 text-xs text-gray-400">
-          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-gray-500"></span>Tier-1</span>
-          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-blue-500"></span>Upstream</span>
-          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-purple-500"></span>This AS</span>
-          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-green-500"></span>Downstream</span>
+    <div class="card p-6 mb-6">
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <h3 class="text-lg font-display font-bold text-[var(--color-text)]">Network Map</h3>
+        <div class="flex gap-3 text-xs text-[var(--color-text-muted)]">
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-[var(--color-status-neutral)]"></span>Tier-1</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-[var(--color-link)]"></span>Upstream</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-[var(--color-accent)]"></span>This AS</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-[var(--color-status-good)]"></span>Downstream</span>
         </div>
-        <span class="ml-auto text-xs text-gray-500">Scroll to zoom · Drag to pan · Click node to open</span>
+        <span class="ml-auto text-xs text-[var(--color-text-dim)]">Scroll to zoom · Drag to pan · Click node to open</span>
       </div>
       <div id="graph-container">
         <svg id="graph-svg"></svg>
@@ -83,31 +82,31 @@ export const page = {
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-      <div class="glass-card rounded-xl p-5">
+      <div class="card p-5">
         <div class="flex items-center justify-between mb-3">
-          <h3 class="text-sm font-bold text-gray-400 uppercase tracking-widest">Announced Prefixes</h3>
-          <button id="prefix-toggle" class="text-xs text-purple-400 hover:text-purple-300 transition-colors">Show all</button>
+          <h3 class="text-sm font-label font-bold text-[var(--color-text-dim)] uppercase tracking-widest">Announced Prefixes</h3>
+          <button id="prefix-toggle" class="text-xs text-[var(--color-link)] hover:text-[var(--color-link-strong)] transition-colors">Show all</button>
         </div>
         <div id="prefix-list" class="max-h-48 overflow-y-auto"></div>
-        <p id="prefix-empty" class="hidden text-sm text-gray-500 italic">No prefix data available.</p>
+        <p id="prefix-empty" class="hidden text-sm text-[var(--color-text-dim)] italic">No prefix data available.</p>
       </div>
-      <div class="glass-card rounded-xl p-5">
-        <h3 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">IXP Presence <span class="text-xs font-normal text-gray-500">(via PeeringDB)</span></h3>
+      <div class="card p-5">
+        <h3 class="text-sm font-label font-bold text-[var(--color-text-dim)] uppercase tracking-widest mb-3">IXP Presence <span class="text-xs font-normal text-[var(--color-text-dim)]">(via PeeringDB)</span></h3>
         <div id="ixp-list" class="space-y-1 text-sm max-h-48 overflow-y-auto">
-          <p id="ixp-empty" class="text-gray-500 italic text-sm">Not listed on PeeringDB.</p>
+          <p id="ixp-empty" class="text-[var(--color-text-dim)] italic text-sm">Not listed on PeeringDB.</p>
         </div>
       </div>
     </div>
 
-    <div class="glass-card rounded-xl p-5">
-      <h3 class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-3">Direct Neighbours <span class="text-xs font-normal text-gray-500">(Level 2 · via RIPE Stat)</span></h3>
+    <div class="card p-5">
+      <h3 class="text-sm font-label font-bold text-[var(--color-text-dim)] uppercase tracking-widest mb-3">Direct Neighbours <span class="text-xs font-normal text-[var(--color-text-dim)]">(Level 2 · via RIPE Stat)</span></h3>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <h4 class="text-xs font-semibold text-blue-400 mb-2">↑ Upstreams (Transit Providers)</h4>
+          <h4 class="text-xs font-label font-semibold text-[var(--color-link)] mb-2">↑ Upstreams (Transit Providers)</h4>
           <div id="upstream-table" class="space-y-1 text-xs font-mono max-h-52 overflow-y-auto"></div>
         </div>
         <div>
-          <h4 class="text-xs font-semibold text-green-400 mb-2">↓ Downstreams (Customers)</h4>
+          <h4 class="text-xs font-label font-semibold text-[var(--color-status-good)] mb-2">↓ Downstreams (Customers)</h4>
           <div id="downstream-table" class="space-y-1 text-xs font-mono max-h-52 overflow-y-auto"></div>
         </div>
       </div>
@@ -170,6 +169,7 @@ export const page = {
       document.getElementById('res-name').textContent = data.name || 'Unknown';
 
       const announcedBadge = document.getElementById('res-announced-badge');
+      announcedBadge.innerHTML = data.announced ? renderLed('good', 'Announced') : '';
       announcedBadge.classList.toggle('hidden', !data.announced);
 
       const typeBadge = document.getElementById('res-type-badge');
@@ -207,8 +207,8 @@ export const page = {
 
       renderPrefixes(data.prefixes);
       renderIxps(data.peeringdb?.ixps);
-      renderNeighbourTable('upstream-table',   data.graph?.level2?.upstreams   ?? [], 'blue');
-      renderNeighbourTable('downstream-table', data.graph?.level2?.downstreams ?? [], 'green');
+      renderNeighbourTable('upstream-table',   data.graph?.level2?.upstreams   ?? [], 'link');
+      renderNeighbourTable('downstream-table', data.graph?.level2?.downstreams ?? [], 'good');
       if (data.graph) renderGraph(data.graph);
     }
 
@@ -219,7 +219,7 @@ export const page = {
       if (!prefixes?.length) { list.classList.add('hidden'); empty.classList.remove('hidden'); toggle.classList.add('hidden'); return; }
       empty.classList.add('hidden'); toggle.classList.remove('hidden');
       const toShow = showAllPrefixes ? prefixes : prefixes.slice(0, 20);
-      list.innerHTML = toShow.map(p => `<span class="prefix-tag">${p}</span>`).join('');
+      list.innerHTML = toShow.map(p => `<span class="tag">${p}</span>`).join('');
       toggle.textContent = showAllPrefixes ? 'Show less' : `Show all (${prefixes.length})`;
     }
 
@@ -235,21 +235,21 @@ export const page = {
       empty.classList.add('hidden');
       list.innerHTML = ixps.map(ix => `
         <div class="ixp-row py-1.5 flex items-center justify-between gap-2 text-sm">
-          <span class="text-gray-200 truncate">${ix.name}</span>
-          <span class="text-xs text-gray-500 shrink-0">${ix.speed >= 1000 ? ix.speed / 1000 + 'G' : ix.speed + 'M'}</span>
+          <span class="text-[var(--color-text)] truncate">${ix.name}</span>
+          <span class="text-xs text-[var(--color-text-dim)] shrink-0">${ix.speed >= 1000 ? ix.speed / 1000 + 'G' : ix.speed + 'M'}</span>
         </div>`).join('');
     }
 
     function renderNeighbourTable(elId, nodes, colour) {
       const el = document.getElementById(elId);
-      if (!nodes?.length) { el.innerHTML = '<p class="text-gray-500 italic">None reported.</p>'; return; }
-      const col = colour === 'blue' ? 'text-blue-400' : 'text-green-400';
+      if (!nodes?.length) { el.innerHTML = '<p class="text-[var(--color-text-dim)] italic">None reported.</p>'; return; }
+      const col = colour === 'link' ? 'text-[var(--color-link)]' : 'text-[var(--color-status-good)]';
       el.innerHTML = nodes.map(n => `
         <div class="flex items-center gap-2 py-0.5 hover:bg-white/5 rounded px-1 cursor-pointer group"
              onclick="window._router.navigate('/asn',{asn:'${n.asn}'})">
           <span class="${col} font-bold w-14 shrink-0">AS${n.asn}</span>
-          <span class="text-gray-300 truncate flex-1 group-hover:text-white">${n.name || '—'}</span>
-          <span class="text-gray-600 shrink-0">${n.power ? 'pwr:' + n.power : ''}</span>
+          <span class="text-[var(--color-text-muted)] truncate flex-1 group-hover:text-[var(--color-text)]">${n.name || '—'}</span>
+          <span class="text-[var(--color-text-dim)] shrink-0">${n.power ? 'pwr:' + n.power : ''}</span>
         </div>`).join('');
     }
 
@@ -307,7 +307,7 @@ export const page = {
         .on('click', (_, d) => { if (d.role !== 'center') window._router.navigate('/asn', { asn: d.asn }); })
         .on('mouseenter', (_, d) => {
           tooltip.style.opacity = '1';
-          tooltip.innerHTML = `<strong class="text-purple-300">AS${d.asn}</strong><br><span class="text-gray-300">${d.name}</span><br><span class="text-gray-500 text-xs capitalize">${d.role === 'tier1' ? 'Tier-1 / Transit' : d.role}</span>`;
+          tooltip.innerHTML = `<strong class="text-[var(--color-accent-strong)]">AS${d.asn}</strong><br><span class="text-[var(--color-text)]">${d.name}</span><br><span class="text-[var(--color-text-dim)] text-xs capitalize">${d.role === 'tier1' ? 'Tier-1 / Transit' : d.role}</span>`;
         })
         .on('mousemove', evt => {
           const r = container.getBoundingClientRect();
